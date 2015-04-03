@@ -1236,7 +1236,30 @@ public class PT2Player
     
     private function audioLoop(event:SampleDataEvent):void
     {
-        mixSampleBlock(event.data, bufferSize);
+        var sampleBlock:int;
+        var samplesTodo:int; /* must be signed */
+        
+        sampleBlock = bufferSize;
+        
+        while (sampleBlock)
+        {
+            samplesTodo = (sampleBlock < samplesLeft) ? sampleBlock : samplesLeft;
+            if (samplesTodo > 0)
+            {
+                mixSampleBlock(event.data, samplesTodo);
+                
+                sampleBlock   -= samplesTodo;
+                samplesLeft   -= samplesTodo;
+            }
+            else
+            {
+                if (mt_Enable)
+                    mt_MusicIRQ();
+
+                samplesLeft = samplesPerFrame;
+            }
+        }
+        
     }
     
 }
