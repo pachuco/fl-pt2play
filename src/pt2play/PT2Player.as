@@ -819,7 +819,8 @@ public class PT2Player
         pattData[1] = D[mt_PattPosOff + 1];
         pattData[2] = D[mt_PattPosOff + 2];
         pattData[3] = D[mt_PattPosOff + 3];
-
+        //trace(pattData[0] + " " + pattData[1] + " " + pattData[2] + " " + pattData[3]);
+        //trace(mt_PattPosOff);
         mt_PattPosOff += 4;
 
         ch.n_note  = (pattData[0] << 8) | pattData[1];
@@ -833,6 +834,7 @@ public class PT2Player
 
             ch.n_start    = mt_SampleStarts[sample];
             ch.n_finetune = D[sampleOffset + 2];
+            trace(sampleOffset);
             ch.n_volume   = D[sampleOffset + 3];
             
             
@@ -898,6 +900,7 @@ public class PT2Player
 
         //mt_PattOff = 1084 + ((uint32_t)(mt_SongDataPtr[952 + mt_SongPos]) << 10);
         mt_PattOff = 1084 + r_uint32le(D, 952 + mt_SongPos) << 10;
+        //trace(mt_SongPos);
     }
 
     private function mt_MusicIRQ():void
@@ -995,8 +998,7 @@ public class PT2Player
                 pattNum = D[952 + i];
         }
         pattNum++;
-
-        sampleStarts = D[1084 + (pattNum << 10)];
+        sampleStarts = 1084 + (pattNum << 10);
         for (i = 0; i < 31; ++i)
         {
             //TODO: check cast from uint8 to int8
@@ -1008,7 +1010,7 @@ public class PT2Player
             w_uint16le(D, p + 0, mt_AmigaWord(r_uint16le(D, p + 0))); /* n_length */
             w_uint16le(D, p + 2, mt_AmigaWord(r_uint16le(D, p + 2))); /* n_repeat */
             w_uint16le(D, p + 3, mt_AmigaWord(r_uint16le(D, p + 3))); /* n_replen */
-
+            
             sampleStarts += r_uint16le(D, p + 0) << 1;
         }
 
@@ -1039,7 +1041,7 @@ public class PT2Player
         mt_PosJumpFlag  = 0;
         mt_PBreakFlag   = 0;
         mt_LowMask      = 0xFF;
-        mt_PattOff      = 1084 + r_uint32le(D, D[952] << 10);
+        mt_PattOff      = 1084 + (D[952] << 10);
     }
 
     [inline] private function sinApx(x:Number):Number
