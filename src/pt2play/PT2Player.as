@@ -7,6 +7,7 @@ import flash.media.SoundChannel;
 import flash.utils.ByteArray;
 import flash.utils.Endian;
 import pt2play.struct.*;
+import pt2play.T;
 
 public class PT2Player 
 {
@@ -831,10 +832,10 @@ public class PT2Player
         {
             sample--;
             sampleOffset = 42 + (30 * sample);
+            T.race(sampleOffset);
 
             ch.n_start    = mt_SampleStarts[sample];
             ch.n_finetune = D[sampleOffset + 2];
-            trace(sampleOffset);
             ch.n_volume   = D[sampleOffset + 3];
             
             
@@ -899,8 +900,7 @@ public class PT2Player
             mt_SongPos = 0;
 
         //mt_PattOff = 1084 + ((uint32_t)(mt_SongDataPtr[952 + mt_SongPos]) << 10);
-        mt_PattOff = 1084 + r_uint32le(D, 952 + mt_SongPos) << 10;
-        //trace(mt_SongPos);
+        mt_PattOff = 1084 + (D[952 + mt_SongPos] << 10);
     }
 
     private function mt_MusicIRQ():void
@@ -1008,8 +1008,8 @@ public class PT2Player
             //TODO: fuck bubsy's swap, read big endian where needed
             /* swap bytes in words (Amiga word -> Intel word) */
             w_uint16le(D, p + 0, mt_AmigaWord(r_uint16le(D, p + 0))); /* n_length */
-            w_uint16le(D, p + 2, mt_AmigaWord(r_uint16le(D, p + 2))); /* n_repeat */
-            w_uint16le(D, p + 3, mt_AmigaWord(r_uint16le(D, p + 3))); /* n_replen */
+            w_uint16le(D, p + 4, mt_AmigaWord(r_uint16le(D, p + 4))); /* n_repeat */
+            w_uint16le(D, p + 6, mt_AmigaWord(r_uint16le(D, p + 6))); /* n_replen */
             
             sampleStarts += r_uint16le(D, p + 0) << 1;
         }
@@ -1111,7 +1111,7 @@ public class PT2Player
                 j = 0;
                 for (; j < numSamples; ++j)
                 {
-                    tempSample = D[v.DAT + v.POS] * (1.0 / 128.0);
+                    tempSample = sign8(D[v.DAT + v.POS]) * (1.0 / 128.0);
                     tempVolume = v.VOL;
 
                     if (tempSample != bSmp.lastValue)

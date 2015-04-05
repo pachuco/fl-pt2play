@@ -4,6 +4,7 @@ import flash.utils.ByteArray;
 import flash.display.Sprite;
 import flash.events.Event;
 import pt2play.PT2Player;
+import pt2play.T;
 
 /**
  * ...
@@ -12,7 +13,7 @@ import pt2play.PT2Player;
 public class Main extends Sprite 
 {
     
-    [Embed(source="4travis3.mod", mimeType="application/octet-stream")]
+    [Embed(source="minecart.mod", mimeType="application/octet-stream")]
     private var Song:Class;
     private var player:PT2Player;
     
@@ -27,6 +28,7 @@ public class Main extends Sprite
     {
         removeEventListener(Event.ADDED_TO_STAGE, init);
         // entry point
+        new T(this.stage, 0x000000);
         player = new PT2Player();
         //Leave mode 0(CIA) for now. Vblank is trouble with all but a few songs
         player.pt2play_PlaySong(new Song() as ByteArray, 0);
