@@ -570,7 +570,7 @@ public class PT2Player
         var vibratoTemp:uint;
         var vibratoData:int;
 
-        vibratoTemp = (ch.n_vibratopos >> 2) & 0x1F;
+        vibratoTemp = (ch.n_vibratopos >> 2) & 0x1F; /* should be unsigned now (if not, then cast) */
         vibratoData =  ch.n_wavecontrol      & 0x03;
 
         if (!vibratoData)
@@ -581,7 +581,7 @@ public class PT2Player
         {
             if (vibratoData == 1)
             {
-                if (ch.n_vibratopos < 0)
+                if (ch.n_vibratopos > 127)
                     vibratoData = 255 - (vibratoTemp << 3);
                 else
                     vibratoData = vibratoTemp << 3;
@@ -592,7 +592,7 @@ public class PT2Player
             }
         }
 
-        vibratoData = (vibratoData * (ch.n_vibratocmd & 0x0F)) >> 7;
+        vibratoData = (vibratoData * (ch.n_vibratocmd & 0x0F)) / 128;
 
         if (ch.n_vibratopos > 127)
             vibratoData = ch.n_period - vibratoData;
@@ -645,7 +645,7 @@ public class PT2Player
                 ch.n_tremolocmd = (ch.n_cmd & 0x00F0) | (ch.n_tremolocmd & 0x0F);
         }
 
-        tremoloTemp = (ch.n_tremolopos  >> 2) & 0x1F;
+        tremoloTemp = (ch.n_tremolopos  >> 2) & 0x1F; /* should be unsigned now (if not, then cast) */
         tremoloData = (ch.n_wavecontrol >> 4) & 0x03;
 
         if (!tremoloData)
@@ -656,7 +656,7 @@ public class PT2Player
         {
             if (tremoloData == 1)
             {
-                if (ch.n_vibratopos < 0) /* PT bug, but don't fix this one */
+                if (ch.n_vibratopos > 127) /* PT bug, but don't fix this one */
                     tremoloData = 255 - (tremoloTemp << 3);
                 else
                     tremoloData = tremoloTemp << 3;
@@ -667,9 +667,9 @@ public class PT2Player
             }
         }
 
-        tremoloData = (tremoloData * (ch.n_tremolocmd & 0x0F)) >> 6;
+        tremoloData = (tremoloData * (ch.n_tremolocmd & 0x0F)) / 64;
 
-        if (ch.n_tremolopos < 0)
+        if (ch.n_tremolopos > 127)
         {
             tremoloData = ch.n_volume - tremoloData;
             if (tremoloData < 0) tremoloData = 0;
@@ -683,6 +683,7 @@ public class PT2Player
         mt_PaulaSetVol(ch.n_index, tremoloData);
 
         ch.n_tremolopos += ((ch.n_tremolocmd >> 2) & 0x3C);
+        ch.n_tremolopos &= 0xFF;
     }
     
     private function mt_SampleOffset(ch:PT_CHN):void
@@ -716,7 +717,7 @@ public class PT2Player
             case 0x05: mt_SetFineTune(ch);       break;
             case 0x06: mt_JumpLoop(ch);          break;
             case 0x07: mt_SetTremoloControl(ch); break;
-            case 0x08: break;
+            case 0x08: /*mt_KarplusStrong(ch);*/ break;
             case 0x09: mt_RetrigNote(ch);        break;
             case 0x0A: mt_VolumeFineUp(ch);      break;
             case 0x0B: mt_VolumeFineDown(ch);    break;
@@ -729,7 +730,7 @@ public class PT2Player
 
     private function mt_CheckMoreEfx(ch:PT_CHN):void
     {
-        switch ((ch.n_cmd >> 8) & 0x0F)
+        switch ((ch.n_cmd & 0x0F00) >> 8)
         {
             case 0x09: mt_SampleOffset(ch); break;
             case 0x0B: mt_PositionJump(ch); break;
@@ -748,7 +749,7 @@ public class PT2Player
 
         if (ch.n_cmd & 0x0FFF)
         {
-            switch ((ch.n_cmd >> 8) & 0x0F)
+            switch ((ch.n_cmd & 0x0F00) >> 8)
             {
                 case 0x00: mt_Arpeggio(ch);            break;
                 case 0x01: mt_PortaUp(ch);             break;
@@ -828,7 +829,7 @@ public class PT2Player
         ch.n_cmd   = (pattData[2] << 8) | pattData[3];
 
         sample = (pattData[0] & 0xF0) | ((pattData[2] & 0xF0) >> 4);
-        if (sample && (sample <= 32)) /* BUGFIX: don't do samples >31 */
+        if (sample && (sample <= 31)) /* BUGFIX: don't do samples >31 */
         {
             sample--;
             sampleOffset = 42 + (30 * sample);
@@ -887,7 +888,7 @@ public class PT2Player
 
     [inline] private function mt_NextPosition():void
     {
-        mt_PatternPos  = (mt_PBreakPos << 4) & 0xFFFF;
+        mt_PatternPos  = mt_PBreakPos << 4
         mt_PBreakPos   = 0;
         mt_PosJumpFlag = 0;
 
