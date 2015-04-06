@@ -594,7 +594,7 @@ public class PT2Player
 
         vibratoData = (vibratoData * (ch.n_vibratocmd & 0x0F)) >> 7;
 
-        if (ch.n_vibratopos < 0)
+        if (ch.n_vibratopos > 127)
             vibratoData = ch.n_period - vibratoData;
         else
             vibratoData = ch.n_period + vibratoData;
@@ -602,6 +602,7 @@ public class PT2Player
         mt_PaulaSetPer(ch.n_index, vibratoData);
 
         ch.n_vibratopos += ((ch.n_vibratocmd >> 2) & 0x3C);
+        ch.n_vibratopos &= 0xFF;
     }
 
     private function mt_Vibrato(ch:PT_CHN):void

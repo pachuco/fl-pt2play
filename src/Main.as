@@ -13,7 +13,7 @@ import pt2play.T;
 public class Main extends Sprite 
 {
     
-    [Embed(source="1patternloop1v3.mod", mimeType="application/octet-stream")]
+    [Embed(source="__asssss.mod", mimeType="application/octet-stream")]
     private var Song:Class;
     private var player:PT2Player;
     
