@@ -1,3 +1,44 @@
+/*
+** PT2PLAY v1.0 - 4th of April 2015
+** ================================
+**
+** C port of ProTracker 2.3A's replayer, by 8bitbubsy (Olav Sorensen)
+** using the original asm source codes by Crayon (Peter Hanning) and ZAP (Lars Hamre)
+**
+** Even the mixer is written to do looping the way Paula (Amiga DSP) does.
+** Probably the most accurate PT MOD replayer ever written.
+**
+** The only difference is that InvertLoop (EFx) is handled like the tracker replayer,
+** not the standalone replayer (where it's different).
+**
+** The BLEP (band-limited step) and high-pass filter routines were coded by aciddose/adejr.
+**
+** pt2play must not be confused with ptplay by Ronald Hof, Timm S. Mueller and Per Johansson.
+** I guess I was a bit unlucky with my replayer naming scheme, sorry!
+**
+** This is by no means a piece of beautiful code, nor is it meant to be...
+** It's just an accurate ProTracker 2 replayer port for people to enjoy.
+**
+**
+** You need to link winmm.lib for this to compile (-lwinmm)
+**
+** User functions:
+**
+** #include <stdint.h>
+**
+** enum
+** {
+**     CIA_TEMPO_MODE    = 0,
+**     VBLANK_TEMPO_MODE = 1
+** };
+**
+** int8_t pt2play_Init(uint32_t outputFreq);
+** void pt2play_Close(void);
+** void pt2play_PauseSong(int8_t pause);
+** void pt2play_PlaySong(uint8_t *moduleData, int8_t tempoMode);
+** void pt2play_SetStereoSep(uint8_t percentage);
+*/
+
 package pt2play 
 {
 
@@ -26,6 +67,9 @@ public class PT2Player
         AUD:Vector.<PA_CHN>,
         mt_SampleStarts:Vector.<int>,
         
+        filterHi:lossyIntegrator_t,
+        filterLo:lossyIntegrator_t,
+        
         soundBufferSize:int,            //int32_t 
         mt_TempoMode:int,               //int8_t  
         mt_SongPos:int,                 //int8_t  
@@ -48,8 +92,7 @@ public class PT2Player
         blepVol:Vector.<BLEP>,
         
     /* pre-initialized variables */
-        masterBufferL:Vector.<Number>     = null,   //*float
-        masterBufferR:Vector.<Number>     = null,   //*float
+        masterBuffer:Vector.<Number>      = null,   //*float
         mixerBuffer:Vector.<int>          = null,   //*int8_t
         samplesLeft:int                   = 0,      //int32_t   /* must be signed */
         mixingMutex:int                   = 0,      //int8_t 
@@ -130,8 +173,11 @@ public class PT2Player
         blepVol[1] = new BLEP();
         blepVol[2] = new BLEP();
         blepVol[3] = new BLEP();
-        masterBufferL = new Vector.<Number>;
-        masterBufferR = new Vector.<Number>;
+        masterBuffer = new Vector.<Number>;
+        filterHi = new lossyIntegrator_t();
+        filterLo = new lossyIntegrator_t();
+        calcCoeffLossyIntegrator(f_outputFreq, 5.2, filterHi);
+        calcCoeffLossyIntegrator(f_outputFreq, 5000, filterLo);
         
         mt_TimerVal     = (f_outputFreq * 125) / 50;
         samplesPerFrame = mt_TimerVal / 125;
@@ -142,6 +188,67 @@ public class PT2Player
     }
     
     /* CODE START */
+    private function calcCoeffLossyIntegrator(sr:Number, hz:Number, filter:lossyIntegrator_t):void
+    {
+        filter.coefficient[0] = Math.tan(Math.PI * hz / sr);
+        filter.coefficient[1] = 1.0 / (1.0 + filter.coefficient[0]);
+    }
+
+    private function clearLossyIntegrator(filter:lossyIntegrator_t):void
+    {
+        filter.buffer[0] = 0.0;
+        filter.buffer[1] = 0.0;
+    }
+
+[inline] private final function lossyIntegrator(filter:lossyIntegrator_t, vin:Vector.<Number>, vout:Vector.<Number>):void
+{
+    var output:Number;
+    var len:uint = vin.length / 2;
+    for (var i:int = 0; i < len; i++) 
+    {
+        // left channel
+        output            = (filter.coefficient[0] * vin[i*2+0] + filter.buffer[0]) * filter.coefficient[1];
+        filter.buffer[0] = filter.coefficient[0] * (vin[i*2+0] - output) + output + 1e-10;
+        vout[i*2+0]           = output;
+
+        // right channel
+        output            = (filter.coefficient[0] * vin[i*2+1] + filter.buffer[1]) * filter.coefficient[1];
+        filter.buffer[1] = filter.coefficient[0] * (vin[i*2+1] - output) + output + 1e-10;
+        vout[i*2+1]           = output; 
+    }
+}
+
+[inline] private final function lossyIntegratorHighPass(filter:lossyIntegrator_t, vin:Vector.<Number>, vout:Vector.<Number>):void
+{
+    var output:Number;
+    var len:uint = vin.length / 2;
+    for (var i:int = 0; i < len; i++) 
+    {
+        // left channel
+        output            = (filter.coefficient[0] * vin[i*2+0] + filter.buffer[0]) * filter.coefficient[1];
+        filter.buffer[0] = filter.coefficient[0] * (vin[i*2+0] - output) + output + 1e-10;
+        vout[i*2+0]           = vin[i*2+0] - output;
+
+        // right channel
+        output            = (filter.coefficient[0] * vin[i*2+1] + filter.buffer[1]) * filter.coefficient[1];
+        filter.buffer[1] = filter.coefficient[0] * (vin[i*2+1] - output) + output + 1e-10;
+        vout[i*2+1]           = vin[i*2+1] - output; 
+    }
+}
+/*
+[inline] private final function lossyIntegratorHighPass(filter:lossyIntegrator_t, vin:Vector.<Number>, vout:Vector.<Number>):void
+{
+    var low:Vector.<Number>; //float[2]
+
+    lossyIntegrator(filter, vin, low);
+
+    vout[0] = vin[0] - low[0];
+    vout[1] = vin[1] - low[1];
+}
+*/
+    
+    
+    
     private function blepAdd(b:BLEP, offset:Number, amplitude:Number):void
     {
         var n:int;
@@ -886,7 +993,7 @@ public class PT2Player
         }
     }
 
-    [inline] private function mt_NextPosition():void
+    private function mt_NextPosition():void
     {
         mt_PatternPos  = mt_PBreakPos << 4
         mt_PBreakPos   = 0;
@@ -1004,6 +1111,15 @@ public class PT2Player
             w_uint16le(D, p + 4, mt_AmigaWord(r_uint16le(D, p + 4))); /* n_repeat */
             w_uint16le(D, p + 6, mt_AmigaWord(r_uint16le(D, p + 6))); /* n_replen */
             
+            if (r_uint16le(D, p + 6) <= 1)
+            {
+                w_uint16le(D, p + 6, 1); // Fix illegal loop repeats (f.ex. from FT2 .MODs)
+
+                // If no loop, zero first two samples of data to prevent "beep"
+                D[sampleStarts + 0] = 0;
+                D[sampleStarts + 1] = 0;
+            }
+            
             sampleStarts += r_uint16le(D, p + 0) << 1;
         }
 
@@ -1037,12 +1153,12 @@ public class PT2Player
         mt_PattOff      = 1084 + (D[952] << 10);
     }
 
-    [inline] private function sinApx(x:Number):Number
+    private function sinApx(x:Number):Number
     {
         x = x * (2.0 - x);
         return (x * 1.09742972 + x * x * 0.31678383);
     }
-    [inline] private function cosApx(x:Number):Number
+    private function cosApx(x:Number):Number
     {
         x = (1.0 - x) * (1.0 + x);
         return (x * 1.09742972 + x * x * 0.31678383);
@@ -1054,7 +1170,7 @@ public class PT2Player
 
         var p:Number;
 
-        scaledPanPos = (stereoSeparation << 7) / 100;
+        scaledPanPos = (stereoSeparation * 128) / 100;
 
         p = (128 - scaledPanPos) * (1.0 / 256.0);
         AUD[0].PANL = cosApx(p);
@@ -1084,13 +1200,8 @@ public class PT2Player
         var bSmp:BLEP;
         var bVol:BLEP;
 
-        masterBufferL.length = numSamples;
-        masterBufferR.length = numSamples;
-        for (i = 0; i < numSamples; i++) 
-        {
-            masterBufferL[i] = 0.0;
-            masterBufferR[i] = 0.0; 
-        }
+        masterBuffer.length = numSamples * 2;
+        for (i = 0; i < masterBuffer.length; i++) masterBuffer[i] = 0.0;
 
         for (i = 0; i < 4; ++i)
         {
@@ -1124,8 +1235,8 @@ public class PT2Player
                     if (bVol.samplesLeft) tempVolume += blepRun(bVol);
 
                     tempSample *= tempVolume;
-                    masterBufferL[j] += (tempSample * v.PANL);
-                    masterBufferR[j] += (tempSample * v.PANR);
+                    masterBuffer[j*2+0] += (tempSample * v.PANL);
+                    masterBuffer[j*2+1] += (tempSample * v.PANR);
 
                     v.FRAC += v.DELTA;
                     if (v.FRAC >= 1.0)
@@ -1138,27 +1249,9 @@ public class PT2Player
 
                         if (v.POS >= v.LEN)
                         {
-                            if (v.REPLEN > 2)
-                            {
-                                v.DAT  = v.REPDAT;
-                                v.POS -= v.LEN;
-                                v.LEN  = v.REPLEN;
-                            }
-                            else
-                            {
-                                v.POS     = 0;
-                                v.TRIGGER = 0;
-
-                                if (bSmp.lastValue != 0.0)
-                                {
-                                    if ((v.LASTDELTA > 0.0) && (v.LASTDELTA > v.LASTFRAC))
-                                        blepAdd(bSmp, v.LASTFRAC / v.LASTDELTA, bSmp.lastValue);
-
-                                    bSmp.lastValue = 0.0;
-                                }
-
-                                break;
-                            }
+                            v.DAT  = v.REPDAT;
+                            v.POS -= v.LEN;
+                            v.LEN  = v.REPLEN;
                         }
                     }
                 }
@@ -1174,13 +1267,16 @@ public class PT2Player
                         if (bVol.samplesLeft) tempVolume += blepRun(bVol);
 
                         tempSample    *= tempVolume;
-                        masterBufferL[j] += (tempSample * v.PANL);
-                        masterBufferR[j] += (tempSample * v.PANR);
+                        masterBuffer[j*2+0] += (tempSample * v.PANL);
+                        masterBuffer[j*2+1] += (tempSample * v.PANR);
                     }
                 }
             }
         }
 
+        lossyIntegratorHighPass(filterHi, masterBuffer, masterBuffer);
+        lossyIntegrator(filterLo, masterBuffer, masterBuffer);
+        
         sndOut = streamOut;
         for (j = 0; j < numSamples; ++j)
         {
@@ -1192,8 +1288,8 @@ public class PT2Player
             else
             {
                 //TODO: Redundancy removal
-                L = masterBufferL[j] * (-32767.0 / 3.0);
-                R = masterBufferR[j] * (-32767.0 / 3.0);
+                L = masterBuffer[j*2+0] * (-32767.0 / 3.0);
+                R = masterBuffer[j*2+1] * (-32767.0 / 3.0);
 
                 if      (L < -32768.0) L = -32768.0;
                 else if (L >  32767.0) L =  32767.0;

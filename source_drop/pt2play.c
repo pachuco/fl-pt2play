@@ -1,14 +1,17 @@
 /*
-** PT2PLAY v1.0 - 11th of February 2015
-** ====================================
+** PT2PLAY v1.0 - 4th of April 2015
+** ================================
 **
 ** C port of ProTracker 2.3A's replayer, by 8bitbubsy (Olav Sorensen)
 ** using the original asm source codes by Crayon (Peter Hanning) and ZAP (Lars Hamre)
 **
+** Even the mixer is written to do looping the way Paula (Amiga DSP) does.
+** Probably the most accurate PT MOD replayer ever written.
+**
 ** The only difference is that InvertLoop (EFx) is handled like the tracker replayer,
 ** not the standalone replayer (where it's different).
 **
-** The BLEP (band-limited step) routines were coded by aciddose/adejr.
+** The BLEP (band-limited step) and high-pass filter routines were coded by aciddose/adejr.
 **
 ** pt2play must not be confused with ptplay by Ronald Hof, Timm S. Mueller and Per Johansson.
 ** I guess I was a bit unlucky with my replayer naming scheme, sorry!
@@ -40,17 +43,17 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
+#define _USE_MATH_DEFINES
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <math.h> // tanf()
 #include <windows.h>
 #include <mmsystem.h>
 
 #ifdef _MSC_VER
 #pragma warning(disable:4127) // disable while (1) warnings
-#endif
-
-#if defined(_MSC_VER) && !defined(inline)
 #define inline __forceinline
 #endif
 
@@ -60,7 +63,7 @@
 
 /* BLEP CONSTANTS */
 #define ZC 8
-#define OS 0 //5
+#define OS 5
 #define SP 5
 #define NS (ZC * OS / SP)
 #define RNS 7 // RNS = (2^ > NS) - 1
@@ -74,6 +77,13 @@ typedef struct blep_data
     float buffer[RNS + 1];
     float lastValue;
 } BLEP;
+
+typedef struct lossyIntegrator_t
+{
+    float buffer[2];
+    float coefficient[2];
+
+} lossyIntegrator_t;
 
 typedef struct
 {
@@ -138,6 +148,8 @@ static PA_CHN AUD[4] =
 
 static int8_t *mt_SampleStarts[31] =
 { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
+
+static lossyIntegrator_t filterHi;
 
 static int32_t soundBufferSize;
 static int8_t mt_TempoMode;
@@ -254,6 +266,43 @@ static const uint32_t blepData[48] =
 
 
 /* CODE START */
+static void calcCoeffLossyIntegrator(float sr, float hz, lossyIntegrator_t *filter)
+{
+    filter->coefficient[0] = tanf((float)(M_PI) * hz / sr);
+    filter->coefficient[1] = 1.0f / (1.0f + filter->coefficient[0]);
+}
+
+static void clearLossyIntegrator(lossyIntegrator_t *filter)
+{
+    filter->buffer[0] = 0.0f;
+    filter->buffer[1] = 0.0f;
+}
+
+static inline void lossyIntegrator(lossyIntegrator_t *filter, float *in, float *out)
+{
+    float output;
+
+    // left channel
+    output            = (filter->coefficient[0] * in[0] + filter->buffer[0]) * filter->coefficient[1];
+    filter->buffer[0] = filter->coefficient[0] * (in[0] - output) + output + 1e-10f;
+    out[0]            = output;
+
+    // right channel
+    output            = (filter->coefficient[0] * in[1] + filter->buffer[1]) * filter->coefficient[1];
+    filter->buffer[1] = filter->coefficient[0] * (in[1] - output) + output + 1e-10f;
+    out[1]            = output;
+}
+
+static inline void lossyIntegratorHighPass(lossyIntegrator_t *filter, float *in, float *out)
+{
+    float low[2];
+
+    lossyIntegrator(filter, in, low);
+
+    out[0] = in[0] - low[0];
+    out[1] = in[1] - low[1];
+}
+
 static void blepAdd(BLEP *b, float offset, float amplitude)
 {
     int8_t n;
@@ -298,7 +347,7 @@ static float blepRun(BLEP *b)
 static void mt_UpdateFunk(PT_CHN *ch)
 {
     int8_t funkspeed;
-
+    
     funkspeed = ch->n_glissfunk >> 4;
     if (funkspeed > 0)
     {
@@ -822,6 +871,7 @@ static void mt_E_Commands(PT_CHN *ch)
         case 0x05: mt_SetFineTune(ch);       break;
         case 0x06: mt_JumpLoop(ch);          break;
         case 0x07: mt_SetTremoloControl(ch); break;
+        case 0x08: /*mt_KarplusStrong(ch);*/ break;
         case 0x09: mt_RetrigNote(ch);        break;
         case 0x0A: mt_VolumeFineUp(ch);      break;
         case 0x0B: mt_VolumeFineDown(ch);    break;
@@ -834,7 +884,7 @@ static void mt_E_Commands(PT_CHN *ch)
 
 static void mt_CheckMoreEfx(PT_CHN *ch)
 {
-    switch ((ch->n_cmd >> 8) & 0x0F)
+    switch ((ch->n_cmd & 0x0F00) >> 8)
     {
         case 0x09: mt_SampleOffset(ch); break;
         case 0x0B: mt_PositionJump(ch); break;
@@ -853,7 +903,7 @@ static void mt_CheckEfx(PT_CHN *ch)
 
     if (ch->n_cmd & 0x0FFF)
     {
-        switch ((ch->n_cmd >> 8) & 0x0F)
+        switch ((ch->n_cmd & 0x0F00) >> 8)
         {
             case 0x00: mt_Arpeggio(ch);            break;
             case 0x01: mt_PortaUp(ch);             break;
@@ -925,11 +975,11 @@ static void mt_PlayVoice(PT_CHN *ch)
 
     mt_PattPosOff += 4;
 
-    ch->n_note  = (pattData[0] << 8) | pattData[1];
-    ch->n_cmd   = (pattData[2] << 8) | pattData[3];
+    ch->n_note = (pattData[0] << 8) | pattData[1];
+    ch->n_cmd  = (pattData[2] << 8) | pattData[3];
 
     sample = (pattData[0] & 0xF0) | ((pattData[2] & 0xF0) >> 4);
-    if (sample && (sample <= 32)) /* BUGFIX: don't do samples >31 */
+    if (sample && (sample <= 31)) /* BUGFIX: don't do samples >31 */
     {
         sample--;
         sampleOffset = 42 + (30 * sample);
@@ -986,7 +1036,7 @@ static void mt_PlayVoice(PT_CHN *ch)
     }
 }
 
-static inline void mt_NextPosition(void)
+static void mt_NextPosition(void)
 {
     mt_PatternPos  = (uint16_t)(mt_PBreakPos) << 4;
     mt_PBreakPos   = 0;
@@ -1100,6 +1150,15 @@ static void mt_Init(uint8_t *mt_Data)
         p[2] = mt_AmigaWord(p[2]); /* n_repeat */
         p[3] = mt_AmigaWord(p[3]); /* n_replen */
 
+        if (p[3] <= 1)
+        {
+            p[3] = 1; // Fix illegal loop repeats (f.ex. from FT2 .MODs)
+
+            // If no loop, zero first two samples of data to prevent "beep"
+            sampleStarts[0] = 0;
+            sampleStarts[1] = 0;
+        }
+
         sampleStarts += (p[0] << 1);
     }
 
@@ -1137,12 +1196,12 @@ static void mt_Init(uint8_t *mt_Data)
     mt_PattOff      = 1084 + ((uint32_t)(mt_SongDataPtr[952]) << 10);
 }
 
-static inline float sinApx(float x)
+static float sinApx(float x)
 {
     x = x * (2.0f - x);
     return (x * 1.09742972f + x * x * 0.31678383f);
 }
-static inline float cosApx(float x)
+static float cosApx(float x)
 {
     x = (1.0f - x) * (1.0f + x);
     return (x * 1.09742972f + x * x * 0.31678383f);
@@ -1154,7 +1213,7 @@ static void mt_genPans(int8_t stereoSeparation)
 
     float p;
 
-    scaledPanPos = ((uint16_t)(stereoSeparation) << 7) / 100;
+    scaledPanPos = ((uint16_t)(stereoSeparation) * 128) / 100;
 
     p = (128 - scaledPanPos) * (1.0f / 256.0f);
     AUD[0].PANL = cosApx(p);
@@ -1177,8 +1236,7 @@ static void mixSampleBlock(int16_t *streamOut, uint32_t numSamples)
 
     float tempSample;
     float tempVolume;
-    float L;
-    float R;
+    float out[2];
 
     PA_CHN *v;
     BLEP *bSmp;
@@ -1199,7 +1257,7 @@ static void mixSampleBlock(int16_t *streamOut, uint32_t numSamples)
             for (; j < numSamples; ++j)
             {
                 tempSample = (float)(v->DAT[v->POS]) * (1.0f / 128.0f);
-                tempVolume = (float)(v->VOL);
+                tempVolume = v->VOL;
 
                 if (tempSample != bSmp->lastValue)
                 {
@@ -1233,27 +1291,9 @@ static void mixSampleBlock(int16_t *streamOut, uint32_t numSamples)
 
                     if (v->POS >= v->LEN)
                     {
-                        if (v->REPLEN > 2)
-                        {
-                            v->DAT  = v->REPDAT;
-                            v->POS -= v->LEN;
-                            v->LEN  = v->REPLEN;
-                        }
-                        else
-                        {
-                            v->POS     = 0;
-                            v->TRIGGER = 0;
-
-                            if (bSmp->lastValue != 0.0f)
-                            {
-                                if ((v->LASTDELTA > 0.0f) && (v->LASTDELTA > v->LASTFRAC))
-                                    blepAdd(bSmp, v->LASTFRAC / v->LASTDELTA, bSmp->lastValue);
-
-                                bSmp->lastValue = 0.0f;
-                            }
-
-                            break;
-                        }
+                        v->DAT  = v->REPDAT;
+                        v->POS -= v->LEN;
+                        v->LEN  = v->REPLEN;
                     }
                 }
             }
@@ -1286,16 +1326,21 @@ static void mixSampleBlock(int16_t *streamOut, uint32_t numSamples)
         }
         else
         {
-            L = masterBufferL[j] * (-32767.0f / 3.0f);
-            R = masterBufferR[j] * (-32767.0f / 3.0f);
+            out[0] = masterBufferL[j];
+            out[1] = masterBufferR[j];
 
-            if      (L < -32768.0f) L = -32768.0f;
-            else if (L >  32767.0f) L =  32767.0f;
-            if      (R < -32768.0f) R = -32768.0f;
-            else if (R >  32767.0f) R =  32767.0f;
+            lossyIntegratorHighPass(&filterHi, out, out);
 
-            *sndOut++ = (int16_t)(L);
-            *sndOut++ = (int16_t)(R);
+            out[0] *= (-32767.0f / 3.0f);
+            out[1] *= (-32767.0f / 3.0f);
+
+                 if (out[0] < -32768.0f) out[0] = -32768.0f;
+            else if (out[0] >  32767.0f) out[0] =  32767.0f;
+                 if (out[1] < -32768.0f) out[1] = -32768.0f;
+            else if (out[1] >  32767.0f) out[1] =  32767.0f;
+
+            *sndOut++ = (int16_t)(out[0]);
+            *sndOut++ = (int16_t)(out[1]);
         }
     }
 }
@@ -1364,6 +1409,7 @@ void pt2play_PlaySong(uint8_t *moduleData, int8_t tempoMode)
 {
     mt_Init(moduleData);
     mt_genPans(INITIAL_STEREO_SEP_PERCENTAGE);
+    clearLossyIntegrator(&filterHi);
 
     memset(blep,    0, sizeof (blep));
     memset(blepVol, 0, sizeof (blepVol));
@@ -1412,6 +1458,8 @@ static int8_t openMixer(uint32_t _samplingFrequency, uint32_t _soundBufferSize)
         isMixing        = 1;
         mt_TimerVal     = (_samplingFrequency * 125) / 50;
         samplesPerFrame = mt_TimerVal / 125;
+
+        calcCoeffLossyIntegrator((float)(_samplingFrequency), 5.2f, &filterHi);
 
         return (1);
     }

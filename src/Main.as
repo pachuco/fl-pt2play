@@ -13,7 +13,7 @@ import pt2play.T;
 public class Main extends Sprite 
 {
     
-    [Embed(source="mus/__asssss.mod", mimeType="application/octet-stream")]
+    [Embed(source="mus/kevatta rinnassa loop.mod", mimeType="application/octet-stream")]
     private var Song:Class;
     private var player:PT2Player;
     
