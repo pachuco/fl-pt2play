@@ -820,8 +820,7 @@ public class PT2Player
         pattData[1] = D[mt_PattPosOff + 1];
         pattData[2] = D[mt_PattPosOff + 2];
         pattData[3] = D[mt_PattPosOff + 3];
-        //trace(pattData[0] + " " + pattData[1] + " " + pattData[2] + " " + pattData[3]);
-        //trace(mt_PattPosOff);
+
         mt_PattPosOff += 4;
 
         ch.n_note  = (pattData[0] << 8) | pattData[1];
@@ -832,13 +831,10 @@ public class PT2Player
         {
             sample--;
             sampleOffset = 42 + (30 * sample);
-            T.race(sampleOffset);
 
             ch.n_start    = mt_SampleStarts[sample];
             ch.n_finetune = D[sampleOffset + 2];
             ch.n_volume   = D[sampleOffset + 3];
-            
-            
             ch.n_length   = r_uint16le(D, sampleOffset + 0);
             ch.n_replen   = r_uint16le(D, sampleOffset + 6);
 
@@ -890,7 +886,6 @@ public class PT2Player
 
     [inline] private function mt_NextPosition():void
     {
-        //TODO: check uint16 cast
         mt_PatternPos  = (mt_PBreakPos << 4) & 0xFFFF;
         mt_PBreakPos   = 0;
         mt_PosJumpFlag = 0;
@@ -899,7 +894,6 @@ public class PT2Player
         if (mt_SongPos >= D[950])
             mt_SongPos = 0;
 
-        //mt_PattOff = 1084 + ((uint32_t)(mt_SongDataPtr[952 + mt_SongPos]) << 10);
         mt_PattOff = 1084 + (D[952 + mt_SongPos] << 10);
     }
 
@@ -976,12 +970,10 @@ public class PT2Player
     
     public function mt_Init(mt_Data:ByteArray):void
     {
-        //TODO: reinstate duplication
         mt_Data.position = 0;
-        D = mt_Data;
-        //D = new ByteArray();
+        D = new ByteArray();
         D.endian = Endian.LITTLE_ENDIAN;
-        //D.writeBytes(mt_Data, 0, mt_Data.length); //clone it for less headaches
+        D.writeBytes(mt_Data, 0, mt_Data.length); //clone it for less headaches
         mt_Data.position = 0;
         
         var sampleStarts:uint;      //*uint8_t
@@ -1001,8 +993,7 @@ public class PT2Player
         sampleStarts = 1084 + (pattNum << 10);
         for (i = 0; i < 31; ++i)
         {
-            //TODO: check cast from uint8 to int8
-            mt_SampleStarts[i] = sign8(sampleStarts);
+            mt_SampleStarts[i] = sampleStarts;
             p = 42 + (30 * i);//uint16_t *
 
             //TODO: fuck bubsy's swap, read big endian where needed
@@ -1105,7 +1096,6 @@ public class PT2Player
             bSmp = blep[i];
             bVol = blepVol[i];
 
-            //TODO: fix TRIGGER 0 and v.DAT NULL, always
             if (v.TRIGGER && v.DAT != C.NULL)
             {
                 j = 0;

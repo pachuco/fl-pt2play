@@ -6,7 +6,7 @@ public class C
     [inline] public static const NULL:uint = 0xFFFFFFFF;
     
     [inline] public static const
-    INITIAL_STEREO_SEP_PERCENTAGE:uint = 25, /* stereo separation in percent */
+    INITIAL_STEREO_SEP_PERCENTAGE:uint = 50, /* stereo separation in percent */
 
     /* BLEP CONSTANTS */
     ZC:uint = 8,

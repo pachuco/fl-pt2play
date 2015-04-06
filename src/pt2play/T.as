@@ -64,7 +64,6 @@ public class T
             var temp:String = buffer[(index + i+1) % bufflen];
             if(temp != null) tfield.appendText(temp + "\n");
         }
-        trace(index);
         ++index;
         index %= bufflen;
     }
