@@ -7,6 +7,7 @@ public class PT_CHN
 {
     public var
         /* these must be in this order */
+        //not anymore, hahahahahahaha...
         n_note:int,                 //int16_t     
         n_cmd:uint,                 //uint16_t    
         n_index:int,                //int8_t      

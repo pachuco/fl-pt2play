@@ -102,46 +102,50 @@ public class PT2Player
         f_outputFreq:Number               = 44100;
     
 /* MACROS */
-    [inline] private final function mt_PaulaStop(i:uint):void {
+    [inline] final private function mt_PaulaStop(i:uint):void {
         AUD[i].POS = 0;
         AUD[i].FRAC = 0.0;
         AUD[i].TRIGGER = 0;
     }
-    [inline] private final function mt_PaulaStart(i:uint):void {
+    [inline] final private function mt_PaulaStart(i:uint):void {
         AUD[i].POS = 0;
         AUD[i].FRAC = 0.0;
         AUD[i].TRIGGER = 1;
     }
-    [inline] private final function mt_PaulaSetVol(i:uint, x:int):void {
+    [inline] final private function mt_PaulaSetVol(i:uint, x:int):void {
         AUD[i].VOL = x * (1.0 / 64.0);
     }
-    [inline] private final function mt_PaulaSetLen(i:uint, x:int):void {
+    [inline] final private function mt_PaulaSetLen(i:uint, x:int):void {
         AUD[i].LEN = x << 1;
     }
-    [inline] private final function mt_PaulaSetDat(i:uint, x:int):void {
+    [inline] final private function mt_PaulaSetDat(i:uint, x:int):void {
         AUD[i].DAT = x;
     }
-    [inline] private final function mt_PaulaSetLoop(i:uint, x:int, y:uint):void {
+    [inline] final private function mt_PaulaSetLoop(i:uint, x:int, y:uint):void {
         if (x) AUD[i].REPDAT = x;
         AUD[i].REPLEN = y << 1;
     }
-    [inline] private final function mt_PaulaSetPer(i:uint, x:int):void {
+    [inline] final private function mt_PaulaSetPer(i:uint, x:int):void {
         if (x) AUD[i].DELTA = (3546895 / (x)) / f_outputFreq;
     }
-    [inline] private final function mt_AmigaWord(x:uint):uint {
+    [inline] static private function mt_AmigaWord(x:uint):uint {
         return ((x << 8) | (x >> 8)) & 0xFFFF;
     }
-    [inline] private final function r_uint16le(arr:ByteArray, off:uint):uint {
+    [inline] static private function r_uint16le(arr:ByteArray, off:uint):uint {
         return arr[off] + (arr[off + 1] << 8);
     }
-    [inline] private final function w_uint16le(arr:ByteArray, off:uint, x:uint):void {
+    [inline] static private function r_uint16be(arr:ByteArray, off:uint):uint {
+        return arr[off + 1] + (arr[off] << 8);
+    }
+    [inline] static private function w_uint16le(arr:ByteArray, off:uint, x:uint):void {
         arr[off + 0] = x;
         arr[off + 1] = x >> 8;
     }
-    [inline] private final function r_uint32le(arr:ByteArray, off:uint):uint {
-        return arr[off] + (arr[off + 1] << 8) + (arr[off + 2] << 16) + (arr[off + 3] << 24);
+    [inline] static private function w_uint16be(arr:ByteArray, off:uint, x:uint):void {
+        arr[off + 0] = x >> 8;
+        arr[off + 1] = x;
     }
-    [inline] private final function sign8(b:int):int {
+    [inline] static private function sign8(b:int):int {
         if(b >= 128) b -= 256
         return b;
     }
@@ -200,43 +204,43 @@ public class PT2Player
         filter.buffer[1] = 0.0;
     }
 
-[inline] private final function lossyIntegrator(filter:lossyIntegrator_t, vin:Vector.<Number>, vout:Vector.<Number>):void
-{
-    var output:Number;
-    var len:uint = vin.length / 2;
-    for (var i:int = 0; i < len; i++) 
+    [inline] final private function lossyIntegrator(filter:lossyIntegrator_t, vin:Vector.<Number>, vout:Vector.<Number>):void
     {
-        // left channel
-        output            = (filter.coefficient[0] * vin[i*2+0] + filter.buffer[0]) * filter.coefficient[1];
-        filter.buffer[0] = filter.coefficient[0] * (vin[i*2+0] - output) + output + 1e-10;
-        vout[i*2+0]           = output;
+        var output:Number;
+        var len:uint = vin.length / 2;
+        for (var i:int = 0; i < len; i++) 
+        {
+            // left channel
+            output            = (filter.coefficient[0] * vin[i*2+0] + filter.buffer[0]) * filter.coefficient[1];
+            filter.buffer[0] = filter.coefficient[0] * (vin[i*2+0] - output) + output + 1e-10;
+            vout[i*2+0]           = output;
 
-        // right channel
-        output            = (filter.coefficient[0] * vin[i*2+1] + filter.buffer[1]) * filter.coefficient[1];
-        filter.buffer[1] = filter.coefficient[0] * (vin[i*2+1] - output) + output + 1e-10;
-        vout[i*2+1]           = output; 
+            // right channel
+            output            = (filter.coefficient[0] * vin[i*2+1] + filter.buffer[1]) * filter.coefficient[1];
+            filter.buffer[1] = filter.coefficient[0] * (vin[i*2+1] - output) + output + 1e-10;
+            vout[i*2+1]           = output; 
+        }
     }
-}
 
-[inline] private final function lossyIntegratorHighPass(filter:lossyIntegrator_t, vin:Vector.<Number>, vout:Vector.<Number>):void
-{
-    var output:Number;
-    var len:uint = vin.length / 2;
-    for (var i:int = 0; i < len; i++) 
+    [inline] final private function lossyIntegratorHighPass(filter:lossyIntegrator_t, vin:Vector.<Number>, vout:Vector.<Number>):void
     {
-        // left channel
-        output            = (filter.coefficient[0] * vin[i*2+0] + filter.buffer[0]) * filter.coefficient[1];
-        filter.buffer[0] = filter.coefficient[0] * (vin[i*2+0] - output) + output + 1e-10;
-        vout[i*2+0]           = vin[i*2+0] - output;
+        var output:Number;
+        var len:uint = vin.length / 2;
+        for (var i:int = 0; i < len; i++) 
+        {
+            // left channel
+            output            = (filter.coefficient[0] * vin[i*2+0] + filter.buffer[0]) * filter.coefficient[1];
+            filter.buffer[0] = filter.coefficient[0] * (vin[i*2+0] - output) + output + 1e-10;
+            vout[i*2+0]           = vin[i*2+0] - output;
 
-        // right channel
-        output            = (filter.coefficient[0] * vin[i*2+1] + filter.buffer[1]) * filter.coefficient[1];
-        filter.buffer[1] = filter.coefficient[0] * (vin[i*2+1] - output) + output + 1e-10;
-        vout[i*2+1]           = vin[i*2+1] - output; 
+            // right channel
+            output            = (filter.coefficient[0] * vin[i*2+1] + filter.buffer[1]) * filter.coefficient[1];
+            filter.buffer[1] = filter.coefficient[0] * (vin[i*2+1] - output) + output + 1e-10;
+            vout[i*2+1]           = vin[i*2+1] - output; 
+        }
     }
-}
 /*
-[inline] private final function lossyIntegratorHighPass(filter:lossyIntegrator_t, vin:Vector.<Number>, vout:Vector.<Number>):void
+[inline] final private function lossyIntegratorHighPass(filter:lossyIntegrator_t, vin:Vector.<Number>, vout:Vector.<Number>):void
 {
     var low:Vector.<Number>; //float[2]
 
@@ -429,6 +433,7 @@ public class PT2Player
 
     private function mt_NoteDelay(ch:PT_CHN):void
     {
+        //TODO: find out why the hell EDx is broken
         if (mt_Counter == (ch.n_cmd & 0x000F))
         {
             if (ch.n_note)
@@ -944,10 +949,10 @@ public class PT2Player
             ch.n_start    = mt_SampleStarts[sample];
             ch.n_finetune = D[sampleOffset + 2];
             ch.n_volume   = D[sampleOffset + 3];
-            ch.n_length   = r_uint16le(D, sampleOffset + 0);
-            ch.n_replen   = r_uint16le(D, sampleOffset + 6);
+            ch.n_length   = r_uint16be(D, sampleOffset + 0);
+            ch.n_replen   = r_uint16be(D, sampleOffset + 6);
 
-            repeat = r_uint16le(D, sampleOffset + 4);
+            repeat = r_uint16be(D, sampleOffset + 4);
             if (repeat > 0)
             {
                 ch.n_loopstart = ch.n_start + (repeat << 1);
@@ -1104,23 +1109,17 @@ public class PT2Player
         {
             mt_SampleStarts[i] = sampleStarts;
             p = 42 + (30 * i);//uint16_t *
-
-            //TODO: fuck bubsy's swap, read big endian where needed
-            /* swap bytes in words (Amiga word -> Intel word) */
-            w_uint16le(D, p + 0, mt_AmigaWord(r_uint16le(D, p + 0))); /* n_length */
-            w_uint16le(D, p + 4, mt_AmigaWord(r_uint16le(D, p + 4))); /* n_repeat */
-            w_uint16le(D, p + 6, mt_AmigaWord(r_uint16le(D, p + 6))); /* n_replen */
             
-            if (r_uint16le(D, p + 6) <= 1)
+            if (r_uint16be(D, p + 6) <= 1)
             {
-                w_uint16le(D, p + 6, 1); // Fix illegal loop repeats (f.ex. from FT2 .MODs)
+                w_uint16be(D, p + 6, 1); // Fix illegal loop repeats (f.ex. from FT2 .MODs)
 
                 // If no loop, zero first two samples of data to prevent "beep"
                 D[sampleStarts + 0] = 0;
                 D[sampleStarts + 1] = 0;
             }
             
-            sampleStarts += r_uint16le(D, p + 0) << 1;
+            sampleStarts += r_uint16be(D, p + 0) << 1;
         }
 
         /*
