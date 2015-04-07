@@ -13,7 +13,7 @@ import pt2play.T;
 public class Main extends Sprite 
 {
     
-    [Embed(source="mus/t/EDx_00.mod", mimeType="application/octet-stream")]
+    [Embed(source="mus/tdk_-_wizardy.mod", mimeType="application/octet-stream")]
     private var Song:Class;
     private var player:PT2Player;
     

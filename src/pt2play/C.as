@@ -10,7 +10,7 @@ public class C
 
     /* BLEP CONSTANTS */
     ZC:uint = 8,
-    OS:uint = 0, //5
+    OS:uint = 5,
     SP:uint = 5,
     NS:uint = (ZC * OS / SP),
     RNS:uint = 7; // RNS = (2^ > NS) - 1
@@ -65,7 +65,7 @@ public class C
         -18,-17,-16,-16,-14,-14,-12,-13,-11,-11,-10,-10, -9, -8, -8, -8, -7, -7
     ]),
 
-    blepData:Vector.<uint> = Vector.<uint>([
+    blepData:Vector.<Number> = Vector.<Number>([
          0.999541,  0.999348,  0.999369,  0.999342,
          0.998741,  0.996602,  0.991206,  0.979689,
          0.957750,  0.919731,  0.859311,  0.770949,

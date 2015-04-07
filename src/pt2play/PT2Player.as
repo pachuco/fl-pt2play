@@ -264,7 +264,7 @@ public class PT2Player
         n   = C.NS;
         i   = offset * C.SP;
         src = i + C.OS;
-        f   = offset * C.SP - i;
+        f   = (offset * C.SP) - i;
         i   = b.index;
 
         while (n--)
@@ -1273,8 +1273,8 @@ public class PT2Player
             }
         }
 
-        lossyIntegratorHighPass(filterHi, masterBuffer, masterBuffer);
-        lossyIntegrator(filterLo, masterBuffer, masterBuffer);
+        //lossyIntegratorHighPass(filterHi, masterBuffer, masterBuffer);
+        //lossyIntegrator(filterLo, masterBuffer, masterBuffer);
         
         sndOut = streamOut;
         for (j = 0; j < numSamples; ++j)
