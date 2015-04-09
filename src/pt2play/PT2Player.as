@@ -899,10 +899,10 @@ public class PT2Player
         {
             if (note >= mt_PeriodTable[i]) break;
         }
-
-        if ((i == 36) && (ch.n_finetune == 15)) i = 35; /* non-PT access violation fix */
-
-        ch.n_period = mt_PeriodTable[(36 * ch.n_finetune) + i];
+        if (i < 36)
+            ch.n_period = mt_PeriodTable[(36 * ch.n_finetune) + i];
+        else
+            mt_PaulaStop(ch.n_index);
 
         if ((ch.n_cmd & 0x0FF0) != 0x0ED0) /* no note delay */
         {
