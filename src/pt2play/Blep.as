@@ -26,11 +26,11 @@ package pt2play
 
 public class Blep 
 {
-    [inline] private static const
+    private var
     /* BLEP CONSTANTS */
     ZC:uint = 8,
     OS:uint = 5,
-    SP:uint = 5,
+    SP:uint = 3,
     NS:uint = (ZC * OS / SP),
     RNS:uint = 7; // RNS = (2^ > NS) - 1
     

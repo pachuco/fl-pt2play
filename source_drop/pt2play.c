@@ -1,15 +1,14 @@
 /*
-** PT2PLAY v1.0 - 4th of April 2015
-** ================================
+** PT2PLAY v1.0 - 10th of April 2015
+** =================================
 **
-** C port of ProTracker 2.3A's replayer, by 8bitbubsy (Olav Sorensen)
+** C port of ProTracker 2.3A's replayer, by 8bitbubsy (Olav Sørensen)
 ** using the original asm source codes by Crayon (Peter Hanning) and ZAP (Lars Hamre)
 **
+** The only differences is that InvertLoop (EFx) and NoteDelay (EDx) are handled like
+** the tracker replayer, since they have bugs in the replayer version bundled with the
+** PT source codes.
 ** Even the mixer is written to do looping the way Paula (Amiga DSP) does.
-** Probably the most accurate PT MOD replayer ever written.
-**
-** The only difference is that InvertLoop (EFx) is handled like the tracker replayer,
-** not the standalone replayer (where it's different).
 **
 ** The BLEP (band-limited step) and high-pass filter routines were coded by aciddose/adejr.
 **
@@ -17,7 +16,7 @@
 ** I guess I was a bit unlucky with my replayer naming scheme, sorry!
 **
 ** This is by no means a piece of beautiful code, nor is it meant to be...
-** It's just an accurate ProTracker 2 replayer port for people to enjoy.
+** It's just an accurate ProTracker 2.3A replayer port for people to enjoy.
 **
 **
 ** You need to link winmm.lib for this to compile (-lwinmm)
@@ -87,15 +86,10 @@ typedef struct lossyIntegrator_t
 
 typedef struct
 {
-    /* these must be in this order */
-    int16_t n_note;
-    uint16_t n_cmd;
-    int8_t n_index;
-    /* --------------------------- */
-
     int8_t *n_start;
     int8_t *n_wavestart;
     int8_t *n_loopstart;
+    int8_t n_index;
     int8_t n_volume;
     int8_t n_toneportdirec;
     int8_t n_vibratopos;
@@ -111,7 +105,9 @@ typedef struct
     uint8_t n_finetune;
     uint8_t n_funkoffset;
     int16_t n_period;
+    int16_t n_note;
     int16_t n_wantedperiod;
+    uint16_t n_cmd;
     uint32_t n_length;
     uint32_t n_replen;
     uint32_t n_repend;
@@ -138,16 +134,14 @@ typedef struct
 
 
 /* VARIABLES */
-static PT_CHN mt_Chan1temp = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
-static PT_CHN mt_Chan2temp = { 0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
-static PT_CHN mt_Chan3temp = { 0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
-static PT_CHN mt_Chan4temp = { 0,0,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
+static PT_CHN mt_Chan1temp;
+static PT_CHN mt_Chan2temp;
+static PT_CHN mt_Chan3temp;
+static PT_CHN mt_Chan4temp;
 
-static PA_CHN AUD[4] =
-{ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
+static PA_CHN AUD[4];
 
-static int8_t *mt_SampleStarts[31] =
-{ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
+static int8_t *mt_SampleStarts[31];
 
 static lossyIntegrator_t filterHi;
 
@@ -412,6 +406,15 @@ static void mt_SetTremoloControl(PT_CHN *ch)
     ch->n_wavecontrol = ((ch->n_cmd & 0x000F) << 4) | (ch->n_wavecontrol & 0x0F);
 }
 
+void mt_DoRetrig(PT_CHN *ch)
+{
+    mt_PaulaSetDat(ch->n_index, ch->n_start); // n_start is increased on 9xx
+    mt_PaulaSetLen(ch->n_index, ch->n_length);
+    mt_PaulaSetPer(ch->n_index, ch->n_period);
+    mt_PaulaSetLoop(ch->n_index, ch->n_loopstart, ch->n_replen);
+    mt_PaulaStart(ch->n_index); // this resets resampling pos
+}
+
 static void mt_RetrigNote(PT_CHN *ch)
 {
     if (ch->n_cmd & 0x000F)
@@ -422,12 +425,7 @@ static void mt_RetrigNote(PT_CHN *ch)
         }
 
         if (!(mt_Counter % (ch->n_cmd & 0x000F)))
-        {
-            mt_PaulaSetDat(ch->n_index, ch->n_start);
-            mt_PaulaSetLen(ch->n_index, ch->n_length);
-            mt_PaulaSetLoop(ch->n_index, ch->n_loopstart, ch->n_replen);
-            mt_PaulaStart(ch->n_index);
-        }
+            mt_DoRetrig(ch);
     }
 }
 
@@ -483,12 +481,7 @@ static void mt_NoteDelay(PT_CHN *ch)
     if (mt_Counter == (ch->n_cmd & 0x000F))
     {
         if (ch->n_note)
-        {
-            mt_PaulaSetDat(ch->n_index, ch->n_start);
-            mt_PaulaSetLen(ch->n_index, ch->n_length);
-            mt_PaulaSetLoop(ch->n_index, ch->n_loopstart, ch->n_replen);
-            mt_PaulaStart(ch->n_index);
-        }
+            mt_DoRetrig(ch);
     }
 }
 
@@ -942,9 +935,10 @@ static void mt_SetPeriod(PT_CHN *ch)
         if (note >= mt_PeriodTable[i]) break;
     }
 
-    if ((i == 36) && (ch->n_finetune == 15)) i = 35; /* non-PT access violation fix */
-
-    ch->n_period = mt_PeriodTable[(36 * ch->n_finetune) + i];
+    if (i < 36)
+        ch->n_period = mt_PeriodTable[(36 * ch->n_finetune) + i];
+    else
+        mt_PaulaStop(ch->n_index);
 
     if ((ch->n_cmd & 0x0FF0) != 0x0ED0) /* no note delay */
     {
@@ -968,7 +962,7 @@ static void mt_PlayVoice(PT_CHN *ch)
     uint16_t sampleOffset;
     uint16_t repeat;
 
-    if (!*((uint32_t *)(ch))) /* no channel data on this row */
+    if (!ch->n_note && !ch->n_cmd)
         mt_PaulaSetPer(ch->n_index, ch->n_period);
 
     *((uint32_t *)(pattData)) = *((uint32_t *)(&mt_SongDataPtr[mt_PattPosOff]));
@@ -1129,6 +1123,11 @@ static void mt_Init(uint8_t *mt_Data)
     uint16_t j;
     uint16_t lastPeriod;
 
+    mt_Chan1temp.n_index = 0;
+    mt_Chan2temp.n_index = 1;
+    mt_Chan3temp.n_index = 2;
+    mt_Chan4temp.n_index = 3;
+
     mt_SongDataPtr = mt_Data;
 
     pattNum = 0;
@@ -1150,11 +1149,27 @@ static void mt_Init(uint8_t *mt_Data)
         p[2] = mt_AmigaWord(p[2]); /* n_repeat */
         p[3] = mt_AmigaWord(p[3]); /* n_replen */
 
+        // loop point sanity checking
+        if ((p[2] + p[3]) > p[0])
+        {
+            if (((p[2] / 2) + p[3]) <= p[0])
+            {
+                // fix for poorly converted STK->PT modules
+                p[2] /= 2;
+            }
+            else
+            {
+                // loop points are still illegal, deactivate loop
+                p[2] = 0;
+                p[3] = 1;
+            }
+        }
+
         if (p[3] <= 1)
         {
-            p[3] = 1; // Fix illegal loop repeats (f.ex. from FT2 .MODs)
+            p[3] = 1; // fix illegal loop length (f.ex. from FT2 .MODs)
 
-            // If no loop, zero first two samples of data to prevent "beep"
+            // if no loop, zero first two samples of data to prevent "beep"
             sampleStarts[0] = 0;
             sampleStarts[1] = 0;
         }
@@ -1427,6 +1442,8 @@ static int8_t openMixer(uint32_t _samplingFrequency, uint32_t _soundBufferSize)
 {
     uint8_t i;
     MMRESULT r;
+
+    memset(AUD, 0, sizeof (AUD));
 
     if (!hWaveOut)
     {

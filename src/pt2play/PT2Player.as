@@ -131,17 +131,17 @@ public class PT2Player
     [inline] static private function mt_AmigaWord(x:uint):uint {
         return ((x << 8) | (x >> 8)) & 0xFFFF;
     }
-    [inline] static private function r_uint16le(arr:ByteArray, off:uint):uint {
+    [inline] static private function r_u16le(arr:ByteArray, off:uint):uint {
         return arr[off] + (arr[off + 1] << 8);
     }
-    [inline] static private function r_uint16be(arr:ByteArray, off:uint):uint {
+    [inline] static private function r_u16be(arr:ByteArray, off:uint):uint {
         return arr[off + 1] + (arr[off] << 8);
     }
-    [inline] static private function w_uint16le(arr:ByteArray, off:uint, x:uint):void {
+    [inline] static private function w_u16le(arr:ByteArray, off:uint, x:uint):void {
         arr[off + 0] = x;
         arr[off + 1] = x >> 8;
     }
-    [inline] static private function w_uint16be(arr:ByteArray, off:uint, x:uint):void {
+    [inline] static private function w_u16be(arr:ByteArray, off:uint, x:uint):void {
         arr[off + 0] = x >> 8;
         arr[off + 1] = x;
     }
@@ -263,13 +263,11 @@ public class PT2Player
             {
                 ch.n_funkoffset = 0;
 
-                //TODO: check
                 if (ch.n_wavestart != C.NULL) /* added for safety reasons */
                 {
                     if (++ch.n_wavestart >= (ch.n_loopstart + ch.n_replen))
                         ch.n_wavestart = ch.n_loopstart;
 
-                    //TODO: check read int8 from ByteArray
                     D[ch.n_wavestart] = -1 - sign8(D[ch.n_wavestart]);
                 }
             }
@@ -322,6 +320,15 @@ public class PT2Player
         ch.n_wavecontrol = ((ch.n_cmd & 0x000F) << 4) | (ch.n_wavecontrol & 0x0F);
     }
     
+    private function mt_DoRetrig(ch:PT_CHN):void
+    {
+        mt_PaulaSetDat(ch.n_index, ch.n_start); // n_start is increased on 9xx
+        mt_PaulaSetLen(ch.n_index, ch.n_length);
+        mt_PaulaSetPer(ch.n_index, ch.n_period);
+        mt_PaulaSetLoop(ch.n_index, ch.n_loopstart, ch.n_replen);
+        mt_PaulaStart(ch.n_index); // this resets resampling pos
+    }
+    
     private function mt_RetrigNote(ch:PT_CHN):void
     {
         if (ch.n_cmd & 0x000F)
@@ -332,12 +339,7 @@ public class PT2Player
             }
 
             if (!(mt_Counter % (ch.n_cmd & 0x000F)))
-            {
-                mt_PaulaSetDat(ch.n_index, ch.n_start);
-                mt_PaulaSetLen(ch.n_index, ch.n_length);
-                mt_PaulaSetLoop(ch.n_index, ch.n_loopstart, ch.n_replen);
-                mt_PaulaStart(ch.n_index);
-            }
+                mt_DoRetrig(ch);
         }
     }
     
@@ -390,16 +392,10 @@ public class PT2Player
 
     private function mt_NoteDelay(ch:PT_CHN):void
     {
-        //TODO: find out why the hell EDx is broken
         if (mt_Counter == (ch.n_cmd & 0x000F))
         {
             if (ch.n_note)
-            {
-                mt_PaulaSetDat(ch.n_index, ch.n_start);
-                mt_PaulaSetLen(ch.n_index, ch.n_length);
-                mt_PaulaSetLoop(ch.n_index, ch.n_loopstart, ch.n_replen);
-                mt_PaulaStart(ch.n_index);
-            }
+                mt_DoRetrig(ch);
         }
     }
 
@@ -456,7 +452,6 @@ public class PT2Player
             if (mt_TempoMode || ((ch.n_cmd & 0x00FF) < 32)){
                 mt_Speed = ch.n_cmd & 0x00FF;
             }else {
-                //TODO: check int16 cast
                 samplesPerFrame = (mt_TimerVal / (ch.n_cmd & 0x00FF));
             }
         }
@@ -884,7 +879,8 @@ public class PT2Player
         var repeat:uint;
 
         /* no channel data on this row */
-        if (ch.n_note == 0 && ch.n_cmd == 0) mt_PaulaSetPer(ch.n_index, ch.n_period);
+        if (!ch.n_note && !ch.n_cmd)
+            mt_PaulaSetPer(ch.n_index, ch.n_period);
 
         pattData = new Vector.<uint>(4, true);
         pattData[0] = D[mt_PattPosOff + 0];
@@ -906,10 +902,10 @@ public class PT2Player
             ch.n_start    = mt_SampleStarts[sample];
             ch.n_finetune = D[sampleOffset + 2];
             ch.n_volume   = D[sampleOffset + 3];
-            ch.n_length   = r_uint16be(D, sampleOffset + 0);
-            ch.n_replen   = r_uint16be(D, sampleOffset + 6);
+            ch.n_length   = r_u16be(D, sampleOffset + 0);
+            ch.n_replen   = r_u16be(D, sampleOffset + 6);
 
-            repeat = r_uint16be(D, sampleOffset + 4);
+            repeat = r_u16be(D, sampleOffset + 4);
             if (repeat > 0)
             {
                 ch.n_loopstart = ch.n_start + (repeat << 1);
@@ -1067,16 +1063,32 @@ public class PT2Player
             mt_SampleStarts[i] = sampleStarts;
             p = 42 + (30 * i);//uint16_t *
             
-            if (r_uint16be(D, p + 6) <= 1)
+            // loop point sanity checking
+            if ((r_u16be(D, p+4) + r_u16be(D, p+6)) > r_u16be(D, p+0))
             {
-                w_uint16be(D, p + 6, 1); // Fix illegal loop repeats (f.ex. from FT2 .MODs)
+                if (((r_u16be(D, p+4) / 2) + r_u16be(D, p+6)) <= r_u16be(D, p+0))
+                {
+                    // fix for poorly converted STK->PT modules
+                    w_u16be(D, p+4, r_u16be(D, p+4) / 2);
+                }
+                else
+                {
+                    // loop points are still illegal, deactivate loop
+                    w_u16be(D, p+4, 0);
+                    w_u16be(D, p+6, 1);
+                }
+            }
+            
+            if (r_u16be(D, p + 6) <= 1)
+            {
+                w_u16be(D, p + 6, 1); // Fix illegal loop repeats (f.ex. from FT2 .MODs)
 
                 // If no loop, zero first two samples of data to prevent "beep"
                 D[sampleStarts + 0] = 0;
                 D[sampleStarts + 1] = 0;
             }
             
-            sampleStarts += r_uint16be(D, p + 0) << 1;
+            sampleStarts += r_u16be(D, p + 0) << 1;
         }
 
         /*
