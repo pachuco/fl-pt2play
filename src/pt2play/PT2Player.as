@@ -88,8 +88,8 @@ public class PT2Player
         mt_PattPosOff:uint,             //uint32_t
         mt_PattOff:uint,                //uint32_t
         
-        blep:Vector.<BLEP>,
-        blepVol:Vector.<BLEP>,
+        blep:Vector.<Blep>,
+        blepVol:Vector.<Blep>,
         
     /* pre-initialized variables */
         masterBuffer:Vector.<Number>      = null,   //*float
@@ -126,7 +126,7 @@ public class PT2Player
         AUD[i].REPLEN = y << 1;
     }
     [inline] final private function mt_PaulaSetPer(i:uint, x:int):void {
-        if (x) AUD[i].DELTA = (3546895 / (x)) / f_outputFreq;
+        if (x) AUD[i].DELTA = (3546895 / x) / f_outputFreq;
     }
     [inline] static private function mt_AmigaWord(x:uint):uint {
         return ((x << 8) | (x >> 8)) & 0xFFFF;
@@ -167,16 +167,16 @@ public class PT2Player
         AUD[2] = new PA_CHN();
         AUD[3] = new PA_CHN();
         mt_SampleStarts = new Vector.<int>(31, true);
-        blep = new Vector.<BLEP>(4, true);
-        blep[0] = new BLEP();
-        blep[1] = new BLEP();
-        blep[2] = new BLEP();
-        blep[3] = new BLEP();
-        blepVol = new Vector.<BLEP>(4, true);
-        blepVol[0] = new BLEP();
-        blepVol[1] = new BLEP();
-        blepVol[2] = new BLEP();
-        blepVol[3] = new BLEP();
+        blep = new Vector.<Blep>(4, true);
+        blep[0] = new Blep();
+        blep[1] = new Blep();
+        blep[2] = new Blep();
+        blep[3] = new Blep();
+        blepVol = new Vector.<Blep>(4, true);
+        blepVol[0] = new Blep();
+        blepVol[1] = new Blep();
+        blepVol[2] = new Blep();
+        blepVol[3] = new Blep();
         masterBuffer = new Vector.<Number>;
         filterHi = new lossyIntegrator_t();
         filterLo = new lossyIntegrator_t();
@@ -250,49 +250,6 @@ public class PT2Player
     vout[1] = vin[1] - low[1];
 }
 */
-    
-    
-    
-    private function blepAdd(b:BLEP, offset:Number, amplitude:Number):void
-    {
-        var n:int;
-        var i:uint;
-
-        var src:uint;
-        var f:Number;
-
-        n   = C.NS;
-        i   = offset * C.SP;
-        src = i + C.OS;
-        f   = (offset * C.SP) - i;
-        i   = b.index;
-
-        while (n--)
-        {
-            b.buffer[i] += (amplitude * (C.blepData[src + 0] + (C.blepData[src + 1] - C.blepData[src + 0]) * f));
-            src         += C.SP;
-
-            i++;
-            i &= C.RNS;
-        }
-
-        b.samplesLeft = C.NS;
-    }
-    
-    private function blepRun(b:BLEP):Number
-    {
-        var output:Number;
-
-        output            = b.buffer[b.index];
-        b.buffer[b.index] = 0.0;
-
-        b.index++;
-        b.index &= C.RNS;
-
-        b.samplesLeft--;
-
-        return output;
-    }
     
     private function mt_UpdateFunk(ch:PT_CHN):void
     {
@@ -1196,8 +1153,8 @@ public class PT2Player
         var R:Number;
 
         var v:PA_CHN;
-        var bSmp:BLEP;
-        var bVol:BLEP;
+        var bSmp:Blep;
+        var bVol:Blep;
 
         masterBuffer.length = numSamples * 2;
         for (i = 0; i < masterBuffer.length; i++) masterBuffer[i] = 0.0;
@@ -1219,19 +1176,19 @@ public class PT2Player
                     if (tempSample != bSmp.lastValue)
                     {
                         if ((v.LASTDELTA > 0.0) && (v.LASTDELTA > v.LASTFRAC))
-                            blepAdd(bSmp, v.LASTFRAC / v.LASTDELTA, bSmp.lastValue - tempSample);
+                            bSmp.blepAdd(v.LASTFRAC / v.LASTDELTA, bSmp.lastValue - tempSample);
 
                         bSmp.lastValue = tempSample;
                     }
 
                     if (tempVolume != bVol.lastValue)
                     {
-                        blepAdd(bVol, 0.0, bVol.lastValue - tempVolume);
+                        bVol.blepAdd(0.0, bVol.lastValue - tempVolume);
                         bVol.lastValue = tempVolume;
                     }
 
-                    if (bSmp.samplesLeft) tempSample += blepRun(bSmp);
-                    if (bVol.samplesLeft) tempVolume += blepRun(bVol);
+                    if (bSmp.samplesLeft) tempSample += bSmp.blepRun();
+                    if (bVol.samplesLeft) tempVolume += bVol.blepRun();
 
                     tempSample *= tempVolume;
                     masterBuffer[j*2+0] += (tempSample * v.PANL);
@@ -1262,8 +1219,8 @@ public class PT2Player
                         tempSample = bSmp.lastValue;
                         tempVolume = bVol.lastValue;
 
-                        if (bSmp.samplesLeft) tempSample += blepRun(bSmp);
-                        if (bVol.samplesLeft) tempVolume += blepRun(bVol);
+                        if (bSmp.samplesLeft) tempSample += bSmp.blepRun();
+                        if (bVol.samplesLeft) tempVolume += bVol.blepRun();
 
                         tempSample    *= tempVolume;
                         masterBuffer[j*2+0] += (tempSample * v.PANL);
