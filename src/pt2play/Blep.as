@@ -30,11 +30,11 @@ public class Blep
     /* BLEP CONSTANTS */
     ZC:uint = 8,
     OS:uint = 5,
-    SP:uint = 3,
+    SP:uint = 5,
     NS:uint = (ZC * OS / SP),
     RNS:uint = 7; // RNS = (2^ > NS) - 1
     
-    private static const
+    private static var
     blepData:Vector.<Number> = Vector.<Number>([
          0.999541,  0.999348,  0.999369,  0.999342,
          0.998741,  0.996602,  0.991206,  0.979689,
@@ -68,12 +68,18 @@ public class Blep
     
     public function blepAdd(offset:Number, amplitude:Number):void
     {
+        var buffer:Vector.<Number> = this.buffer;
+        var blepData:Vector.<Number> = Blep.blepData;
+        
         var n:int;
         var i:uint;
 
         var src:uint;
         var f:Number;
 
+        var bd0:Number;
+        var bd1:Number;
+        
         n   = NS;
         i   = offset * SP;
         src = i + OS;
@@ -82,7 +88,10 @@ public class Blep
 
         while (n--)
         {
-            buffer[i] += (amplitude * (blepData[src + 0] + (blepData[src + 1] - blepData[src + 0]) * f));
+            bd0 = blepData[src + 0];
+            bd1 = blepData[src + 1];
+            
+            buffer[i] += (amplitude * (bd0 + (bd1 - bd0) * f));
             src         += SP;
 
             i++;

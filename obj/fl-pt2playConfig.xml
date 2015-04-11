@@ -14,7 +14,7 @@
     </define>
     <define append="true">
       <name>CONFIG::timeStamp</name>
-      <value>'4/10/2015'</value>
+      <value>'4/11/2015'</value>
     </define>
     <define append="true">
       <name>CONFIG::air</name>
@@ -34,6 +34,9 @@
       <path-element>C:\p_files\prog\_proj\FlashDevelop\fl-pt2play\src</path-element>
       <path-element>C:\p_files\prog\FlashDevelop\Library\AS3\classes</path-element>
     </source-path>
+    <library-path append="true">
+      <path-element>C:\p_files\prog\_proj\FlashDevelop\fl-pt2play\lib\TheMiner_en.swc</path-element>
+    </library-path>
   </compiler>
   <file-specs>
     <path-element>C:\p_files\prog\_proj\FlashDevelop\fl-pt2play\src\Main.as</path-element>

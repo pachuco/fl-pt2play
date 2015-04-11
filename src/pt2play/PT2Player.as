@@ -268,7 +268,9 @@ public class PT2Player
                     if (++ch.n_wavestart >= (ch.n_loopstart + ch.n_replen))
                         ch.n_wavestart = ch.n_loopstart;
 
-                    D[ch.n_wavestart] = -1 - sign8(D[ch.n_wavestart]);
+                    var kuk:int = D[ch.n_wavestart];
+                    kuk = kuk >= 128 ? kuk - 256 : kuk;
+                    D[ch.n_wavestart] = -1 - kuk;
                 }
             }
         }
@@ -1182,7 +1184,9 @@ public class PT2Player
                 j = 0;
                 for (; j < numSamples; ++j)
                 {
-                    tempSample = sign8(D[v.DAT + v.POS]) * (1.0 / 128.0);
+                    var kuk:int = D[v.DAT + v.POS];
+                    kuk = kuk >= 128 ? kuk - 256 : kuk;
+                    tempSample = kuk * (1.0 / 128.0);
                     tempVolume = v.VOL;
 
                     if (tempSample != bSmp.lastValue)

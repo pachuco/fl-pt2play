@@ -6,13 +6,9 @@ import pt2play.C;
 public class PT_CHN 
 {
     public var
-        /* these must be in this order */
-        //not anymore, hahahahahahaha...
         n_note:int,                 //int16_t     
         n_cmd:uint,                 //uint16_t    
         n_index:int,                //int8_t      
-        /* --------------------------- */
-        
         n_start:uint,               //*int8_t  
         n_wavestart:uint,           //*int8_t  
         n_loopstart:uint,           //*int8_t  
