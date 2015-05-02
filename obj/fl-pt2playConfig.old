@@ -14,7 +14,7 @@
     </define>
     <define append="true">
       <name>CONFIG::timeStamp</name>
-      <value>'4/11/2015'</value>
+      <value>'5/2/2015'</value>
     </define>
     <define append="true">
       <name>CONFIG::air</name>
@@ -41,7 +41,7 @@
   <file-specs>
     <path-element>C:\p_files\prog\_proj\FlashDevelop\fl-pt2play\src\Main.as</path-element>
   </file-specs>
-  <default-background-color>#FFFFFF</default-background-color>
+  <default-background-color>#000000</default-background-color>
   <default-frame-rate>30</default-frame-rate>
   <default-size>
     <width>800</width>

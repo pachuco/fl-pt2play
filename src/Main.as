@@ -14,11 +14,11 @@ import com.sociodox.theminer.*;
 public class Main extends Sprite 
 {
     
-    [Embed(source="mus/travolta_-_testlast.mod", mimeType="application/octet-stream")]
+    [Embed(source="mus/t/EDx_03.mod", mimeType="application/octet-stream")]
     private var Song:Class;
     private var player:PT2Player;
     
-    private var miner:TheMiner;
+    //private var miner:TheMiner;
     
     public function Main() 
     {
@@ -30,8 +30,8 @@ public class Main extends Sprite
     {
         removeEventListener(Event.ADDED_TO_STAGE, init);
         // entry point
-        miner = new TheMiner();
-        this.addChild(miner);
+        //miner = new TheMiner();
+        //this.addChild(miner);
         
         //new T(this.stage, 0x000000);
         
