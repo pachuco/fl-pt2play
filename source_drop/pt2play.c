@@ -1,6 +1,6 @@
 /*
-** PT2PLAY v1.0 - 10th of April 2015
-** =================================
+** PT2PLAY v1.0 - 2nd of May 2015 - http://16-bits.org
+** ===================================================
 **
 ** C port of ProTracker 2.3A's replayer, by 8bitbubsy (Olav Sørensen)
 ** using the original asm source codes by Crayon (Peter Hanning) and ZAP (Lars Hamre)
@@ -8,8 +8,8 @@
 ** The only differences is that InvertLoop (EFx) and NoteDelay (EDx) are handled like
 ** the tracker replayer, since they have bugs in the replayer version bundled with the
 ** PT source codes.
-** Even the mixer is written to do looping the way Paula (Amiga DSP) does.
 **
+** Even the mixer is written to do looping the way Paula (Amiga DSP) does.
 ** The BLEP (band-limited step) and high-pass filter routines were coded by aciddose/adejr.
 **
 ** pt2play must not be confused with ptplay by Ronald Hof, Timm S. Mueller and Per Johansson.
@@ -134,10 +134,7 @@ typedef struct
 
 
 /* VARIABLES */
-static PT_CHN mt_Chan1temp;
-static PT_CHN mt_Chan2temp;
-static PT_CHN mt_Chan3temp;
-static PT_CHN mt_Chan4temp;
+static PT_CHN mt_ChanTemp[4];
 
 static PA_CHN AUD[4];
 
@@ -411,8 +408,8 @@ void mt_DoRetrig(PT_CHN *ch)
     mt_PaulaSetDat(ch->n_index, ch->n_start); // n_start is increased on 9xx
     mt_PaulaSetLen(ch->n_index, ch->n_length);
     mt_PaulaSetPer(ch->n_index, ch->n_period);
-    mt_PaulaSetLoop(ch->n_index, ch->n_loopstart, ch->n_replen);
     mt_PaulaStart(ch->n_index); // this resets resampling pos
+    mt_PaulaSetLoop(ch->n_index, ch->n_loopstart, ch->n_replen);
 }
 
 static void mt_RetrigNote(PT_CHN *ch)
@@ -480,7 +477,7 @@ static void mt_NoteDelay(PT_CHN *ch)
 {
     if (mt_Counter == (ch->n_cmd & 0x000F))
     {
-        if (ch->n_note)
+        if (ch->n_note & 0x0FFF)
             mt_DoRetrig(ch);
     }
 }
@@ -843,12 +840,12 @@ static void mt_SampleOffset(PT_CHN *ch)
     newOffset = ch->n_sampleoffset << 7;
     if (newOffset < ch->n_length)
     {
-        ch->n_length -=  newOffset;
-        ch->n_start  += (newOffset << 1);
+        ch->n_length -= newOffset;
+        ch->n_start += (newOffset << 1);
     }
     else
     {
-        ch->n_length = 1;
+        ch->n_length = 0;
     }
 }
 
@@ -937,16 +934,21 @@ static void mt_SetPeriod(PT_CHN *ch)
 
     if (i < 36)
         ch->n_period = mt_PeriodTable[(36 * ch->n_finetune) + i];
-    else
-        mt_PaulaStop(ch->n_index);
 
     if ((ch->n_cmd & 0x0FF0) != 0x0ED0) /* no note delay */
     {
         if (!(ch->n_wavecontrol & 0x04)) ch->n_vibratopos = 0;
         if (!(ch->n_wavecontrol & 0x40)) ch->n_tremolopos = 0;
 
-        mt_PaulaSetDat(ch->n_index, ch->n_start);
         mt_PaulaSetLen(ch->n_index, ch->n_length);
+        mt_PaulaSetDat(ch->n_index, ch->n_start);
+
+        if (ch->n_length == 0)
+        {
+            ch->n_loopstart = 0;
+            ch->n_replen = 1;
+        }
+
         mt_PaulaSetPer(ch->n_index, ch->n_period);
         mt_PaulaStart(ch->n_index);
     }
@@ -967,13 +969,11 @@ static void mt_PlayVoice(PT_CHN *ch)
 
     *((uint32_t *)(pattData)) = *((uint32_t *)(&mt_SongDataPtr[mt_PattPosOff]));
 
-    mt_PattPosOff += 4;
-
     ch->n_note = (pattData[0] << 8) | pattData[1];
     ch->n_cmd  = (pattData[2] << 8) | pattData[3];
 
-    sample = (pattData[0] & 0xF0) | ((pattData[2] & 0xF0) >> 4);
-    if (sample && (sample <= 31)) /* BUGFIX: don't do samples >31 */
+    sample = (pattData[0] & 0xF0) | (pattData[2] >> 4);
+    if ((sample >= 1) && (sample <= 31)) /* BUGFIX: don't do samples >31 */
     {
         sample--;
         sampleOffset = 42 + (30 * sample);
@@ -983,6 +983,8 @@ static void mt_PlayVoice(PT_CHN *ch)
         ch->n_volume   = mt_SongDataPtr[sampleOffset + 3];
         ch->n_length   = *((uint16_t *)(&mt_SongDataPtr[sampleOffset + 0]));
         ch->n_replen   = *((uint16_t *)(&mt_SongDataPtr[sampleOffset + 6]));
+
+        mt_PaulaSetVol(ch->n_index, ch->n_volume);
 
         repeat = *((uint16_t *)(&mt_SongDataPtr[sampleOffset + 4]));
         if (repeat > 0)
@@ -1007,7 +1009,7 @@ static void mt_PlayVoice(PT_CHN *ch)
         }
         else
         {
-            cmd = (ch->n_cmd >> 8) & 0x0F;
+            cmd = (ch->n_cmd & 0x0F00) >> 8;
             if ((cmd == 0x03) || (cmd == 0x05))
             {
                 mt_SetTonePorta(ch);
@@ -1028,6 +1030,8 @@ static void mt_PlayVoice(PT_CHN *ch)
     {
         mt_CheckMoreEfx(ch);
     }
+
+    mt_PattPosOff += 4;
 }
 
 static void mt_NextPosition(void)
@@ -1045,6 +1049,8 @@ static void mt_NextPosition(void)
 
 static void mt_MusicIRQ(void)
 {
+    uint8_t i;
+
     mt_Counter++;
     if (mt_Counter >= mt_Speed)
     {
@@ -1054,29 +1060,16 @@ static void mt_MusicIRQ(void)
         {
             mt_PattPosOff = mt_PattOff + mt_PatternPos;
 
-            mt_PlayVoice(&mt_Chan1temp);
-            mt_PaulaSetVol(0, mt_Chan1temp.n_volume);
-
-            mt_PlayVoice(&mt_Chan2temp);
-            mt_PaulaSetVol(1, mt_Chan2temp.n_volume);
-
-            mt_PlayVoice(&mt_Chan3temp);
-            mt_PaulaSetVol(2, mt_Chan3temp.n_volume);
-
-            mt_PlayVoice(&mt_Chan4temp);
-            mt_PaulaSetVol(3, mt_Chan4temp.n_volume);
-
-            mt_PaulaSetLoop(0, mt_Chan1temp.n_loopstart, mt_Chan1temp.n_replen);
-            mt_PaulaSetLoop(1, mt_Chan2temp.n_loopstart, mt_Chan2temp.n_replen);
-            mt_PaulaSetLoop(2, mt_Chan3temp.n_loopstart, mt_Chan3temp.n_replen);
-            mt_PaulaSetLoop(3, mt_Chan4temp.n_loopstart, mt_Chan4temp.n_replen);
+            for (i = 0; i < 4; ++i)
+            {
+                mt_PlayVoice(&mt_ChanTemp[i]);
+                mt_PaulaSetLoop(i, mt_ChanTemp[i].n_loopstart, mt_ChanTemp[i].n_replen);
+            }
         }
         else
         {
-            mt_CheckEfx(&mt_Chan1temp);
-            mt_CheckEfx(&mt_Chan2temp);
-            mt_CheckEfx(&mt_Chan3temp);
-            mt_CheckEfx(&mt_Chan4temp);
+            for (i = 0; i < 4; ++i)
+                mt_CheckEfx(&mt_ChanTemp[i]);
         }
 
         mt_PatternPos += 16;
@@ -1105,10 +1098,8 @@ static void mt_MusicIRQ(void)
     }
     else
     {
-        mt_CheckEfx(&mt_Chan1temp);
-        mt_CheckEfx(&mt_Chan2temp);
-        mt_CheckEfx(&mt_Chan3temp);
-        mt_CheckEfx(&mt_Chan4temp);
+        for (i = 0; i < 4; ++i)
+            mt_CheckEfx(&mt_ChanTemp[i]);
 
         if (mt_PosJumpFlag) mt_NextPosition();
     }
@@ -1123,10 +1114,8 @@ static void mt_Init(uint8_t *mt_Data)
     uint16_t j;
     uint16_t lastPeriod;
 
-    mt_Chan1temp.n_index = 0;
-    mt_Chan2temp.n_index = 1;
-    mt_Chan3temp.n_index = 2;
-    mt_Chan4temp.n_index = 3;
+    for (i = 0; i < 4; ++i)
+        mt_ChanTemp[i].n_index = i;
 
     mt_SongDataPtr = mt_Data;
 
@@ -1268,8 +1257,7 @@ static void mixSampleBlock(int16_t *streamOut, uint32_t numSamples)
 
         if (v->TRIGGER && v->DAT)
         {
-            j = 0;
-            for (; j < numSamples; ++j)
+            for (j = 0; j < numSamples; ++j)
             {
                 tempSample = (float)(v->DAT[v->POS]) * (1.0f / 128.0f);
                 tempVolume = v->VOL;
@@ -1310,22 +1298,6 @@ static void mixSampleBlock(int16_t *streamOut, uint32_t numSamples)
                         v->POS -= v->LEN;
                         v->LEN  = v->REPLEN;
                     }
-                }
-            }
-
-            if ((j < numSamples) && !v->TRIGGER && (bSmp->samplesLeft || bVol->samplesLeft))
-            {
-                for (; j < numSamples; ++j)
-                {
-                    tempSample = bSmp->lastValue;
-                    tempVolume = bVol->lastValue;
-
-                    if (bSmp->samplesLeft) tempSample += blepRun(bSmp);
-                    if (bVol->samplesLeft) tempVolume += blepRun(bVol);
-
-                    tempSample    *= tempVolume;
-                    masterBufferL[j] += (tempSample * v->PANL);
-                    masterBufferR[j] += (tempSample * v->PANR);
                 }
             }
         }

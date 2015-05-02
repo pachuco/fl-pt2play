@@ -53,16 +53,13 @@ import pt2play.T;
 public class PT2Player 
 {
     
-    private var D:ByteArray;
+    private var D:Vector.<uint>;
     private var audioOut:Sound;
     private var sc:SoundChannel;
     
     /* VARIABLES */
     private var
-        mt_Chan1temp:PT_CHN,
-        mt_Chan2temp:PT_CHN,
-        mt_Chan3temp:PT_CHN,
-        mt_Chan4temp:PT_CHN,
+        mt_ChanTemp:Vector.<PT_CHN>,
         
         AUD:Vector.<PA_CHN>,
         mt_SampleStarts:Vector.<int>,
@@ -131,17 +128,19 @@ public class PT2Player
     [inline] static private function mt_AmigaWord(x:uint):uint {
         return ((x << 8) | (x >> 8)) & 0xFFFF;
     }
-    [inline] static private function r_u16le(arr:ByteArray, off:uint):uint {
+    [inline] static private function r_u16le(arr:Vector.<uint>, off:uint):uint {
         return arr[off] + (arr[off + 1] << 8);
     }
-    [inline] static private function r_u16be(arr:ByteArray, off:uint):uint {
+    [inline] static private function r_u16be(arr:Vector.<uint>, off:uint):uint {
         return arr[off + 1] + (arr[off] << 8);
     }
-    [inline] static private function w_u16le(arr:ByteArray, off:uint, x:uint):void {
+    [inline] static private function w_u16le(arr:Vector.<uint>, off:uint, x:uint):void {
+        x &= 0xFFFF;
         arr[off + 0] = x;
         arr[off + 1] = x >> 8;
     }
-    [inline] static private function w_u16be(arr:ByteArray, off:uint, x:uint):void {
+    [inline] static private function w_u16be(arr:Vector.<uint>, off:uint, x:uint):void {
+        x &= 0xFFFF;
         arr[off + 0] = x >> 8;
         arr[off + 1] = x;
     }
@@ -152,36 +151,27 @@ public class PT2Player
 
     public function PT2Player()
     {
-        //yuckies
-        mt_Chan1temp = new PT_CHN();
-        mt_Chan2temp = new PT_CHN();
-        mt_Chan3temp = new PT_CHN();
-        mt_Chan4temp = new PT_CHN();
-        mt_Chan1temp.n_index = 0;
-        mt_Chan2temp.n_index = 1;
-        mt_Chan3temp.n_index = 2;
-        mt_Chan4temp.n_index = 3;
+        var i:uint;
+        
+        mt_ChanTemp = new Vector.<PT_CHN>(4, true);
         AUD = new Vector.<PA_CHN>(4, true);
-        AUD[0] = new PA_CHN();
-        AUD[1] = new PA_CHN();
-        AUD[2] = new PA_CHN();
-        AUD[3] = new PA_CHN();
         mt_SampleStarts = new Vector.<int>(31, true);
         blep = new Vector.<Blep>(4, true);
-        blep[0] = new Blep();
-        blep[1] = new Blep();
-        blep[2] = new Blep();
-        blep[3] = new Blep();
         blepVol = new Vector.<Blep>(4, true);
-        blepVol[0] = new Blep();
-        blepVol[1] = new Blep();
-        blepVol[2] = new Blep();
-        blepVol[3] = new Blep();
         masterBuffer = new Vector.<Number>;
         filterHi = new lossyIntegrator_t();
         filterLo = new lossyIntegrator_t();
         calcCoeffLossyIntegrator(f_outputFreq, 5.2, filterHi);
         calcCoeffLossyIntegrator(f_outputFreq, 5000, filterLo);
+        
+        for (i = 0; i < 4; i++) 
+        {
+            mt_ChanTemp[i] = new PT_CHN();
+            mt_ChanTemp[i].n_index = 0;
+            AUD[i] = new PA_CHN();
+            blep[i] = new Blep();
+            blepVol[i] = new Blep();
+        }
         
         mt_TimerVal     = (f_outputFreq * 125) / 50;
         samplesPerFrame = mt_TimerVal / 125;
@@ -268,9 +258,16 @@ public class PT2Player
                     if (++ch.n_wavestart >= (ch.n_loopstart + ch.n_replen))
                         ch.n_wavestart = ch.n_loopstart;
 
+                    //TODO: well, shit.
+                    /*
                     var kuk:int = D[ch.n_wavestart];
                     kuk = kuk >= 128 ? kuk - 256 : kuk;
-                    D[ch.n_wavestart] = -1 - kuk;
+                    kuk = -1 - kuk;
+                    kuk = kuk < 0 ? kuk + 256 : kuk;
+                    kuk &= 0xFF;
+                    D[ch.n_wavestart] = kuk;
+                    */
+                    D[ch.n_wavestart] = ( -1 - D[ch.n_wavestart]) & 0xFF;
                 }
             }
         }
@@ -327,8 +324,8 @@ public class PT2Player
         mt_PaulaSetDat(ch.n_index, ch.n_start); // n_start is increased on 9xx
         mt_PaulaSetLen(ch.n_index, ch.n_length);
         mt_PaulaSetPer(ch.n_index, ch.n_period);
-        mt_PaulaSetLoop(ch.n_index, ch.n_loopstart, ch.n_replen);
         mt_PaulaStart(ch.n_index); // this resets resampling pos
+        mt_PaulaSetLoop(ch.n_index, ch.n_loopstart, ch.n_replen);
     }
     
     private function mt_RetrigNote(ch:PT_CHN):void
@@ -396,7 +393,7 @@ public class PT2Player
     {
         if (mt_Counter == (ch.n_cmd & 0x000F))
         {
-            if (ch.n_note)
+            if (ch.n_note & 0x0FFF)
                 mt_DoRetrig(ch);
         }
     }
@@ -767,7 +764,7 @@ public class PT2Player
         }
         else
         {
-            ch.n_length = 1;
+            ch.n_length = 0;
         }
     }
 
@@ -855,16 +852,21 @@ public class PT2Player
         }
         if (i < 36)
             ch.n_period = mt_PeriodTable[(36 * ch.n_finetune) + i];
-        else
-            mt_PaulaStop(ch.n_index);
 
         if ((ch.n_cmd & 0x0FF0) != 0x0ED0) /* no note delay */
         {
             if (!(ch.n_wavecontrol & 0x04)) ch.n_vibratopos = 0;
             if (!(ch.n_wavecontrol & 0x40)) ch.n_tremolopos = 0;
 
-            mt_PaulaSetDat(ch.n_index, ch.n_start);
             mt_PaulaSetLen(ch.n_index, ch.n_length);
+            mt_PaulaSetDat(ch.n_index, ch.n_start);
+            
+            if (ch.n_length == 0)
+            {
+                ch.n_loopstart = 0;
+                ch.n_replen = 1;
+            }
+            
             mt_PaulaSetPer(ch.n_index, ch.n_period);
             mt_PaulaStart(ch.n_index);
         }
@@ -890,13 +892,11 @@ public class PT2Player
         pattData[2] = D[mt_PattPosOff + 2];
         pattData[3] = D[mt_PattPosOff + 3];
 
-        mt_PattPosOff += 4;
-
         ch.n_note  = (pattData[0] << 8) | pattData[1];
         ch.n_cmd   = (pattData[2] << 8) | pattData[3];
 
-        sample = (pattData[0] & 0xF0) | ((pattData[2] & 0xF0) >> 4);
-        if (sample && (sample <= 31)) /* BUGFIX: don't do samples >31 */
+        sample = (pattData[0] & 0xF0) | (pattData[2] >> 4);
+        if ((sample >= 1) && (sample <= 31)) /* BUGFIX: don't do samples >31 */
         {
             sample--;
             sampleOffset = 42 + (30 * sample);
@@ -906,7 +906,9 @@ public class PT2Player
             ch.n_volume   = D[sampleOffset + 3];
             ch.n_length   = r_u16be(D, sampleOffset + 0);
             ch.n_replen   = r_u16be(D, sampleOffset + 6);
-
+            
+            mt_PaulaSetVol(ch.n_index, ch.n_volume);
+            
             repeat = r_u16be(D, sampleOffset + 4);
             if (repeat > 0)
             {
@@ -930,7 +932,7 @@ public class PT2Player
             }
             else
             {
-                cmd = (ch.n_cmd >> 8) & 0x0F;
+                cmd = (ch.n_cmd & 0x0F00) >> 8;
                 if ((cmd == 0x03) || (cmd == 0x05))
                 {
                     mt_SetTonePorta(ch);
@@ -951,6 +953,8 @@ public class PT2Player
         {
             mt_CheckMoreEfx(ch);
         }
+        
+        mt_PattPosOff += 4;
     }
 
     private function mt_NextPosition():void
@@ -968,6 +972,8 @@ public class PT2Player
 
     private function mt_MusicIRQ():void
     {
+        var i:uint;
+        
         mt_Counter++;
         if (mt_Counter >= mt_Speed)
         {
@@ -976,30 +982,19 @@ public class PT2Player
             if (!mt_PattDelTime2)
             {
                 mt_PattPosOff = mt_PattOff + mt_PatternPos;
-
-                mt_PlayVoice(mt_Chan1temp);
-                mt_PaulaSetVol(0, mt_Chan1temp.n_volume);
-
-                mt_PlayVoice(mt_Chan2temp);
-                mt_PaulaSetVol(1, mt_Chan2temp.n_volume);
-
-                mt_PlayVoice(mt_Chan3temp);
-                mt_PaulaSetVol(2, mt_Chan3temp.n_volume);
-
-                mt_PlayVoice(mt_Chan4temp);
-                mt_PaulaSetVol(3, mt_Chan4temp.n_volume);
-
-                mt_PaulaSetLoop(0, mt_Chan1temp.n_loopstart, mt_Chan1temp.n_replen);
-                mt_PaulaSetLoop(1, mt_Chan2temp.n_loopstart, mt_Chan2temp.n_replen);
-                mt_PaulaSetLoop(2, mt_Chan3temp.n_loopstart, mt_Chan3temp.n_replen);
-                mt_PaulaSetLoop(3, mt_Chan4temp.n_loopstart, mt_Chan4temp.n_replen);
+                
+                for (i = 0; i < 4; i++) 
+                {
+                    mt_PlayVoice(mt_ChanTemp[i]);
+                    mt_PaulaSetLoop(i, mt_ChanTemp[i].n_loopstart, mt_ChanTemp[i].n_replen);
+                }
             }
             else
             {
-                mt_CheckEfx(mt_Chan1temp);
-                mt_CheckEfx(mt_Chan2temp);
-                mt_CheckEfx(mt_Chan3temp);
-                mt_CheckEfx(mt_Chan4temp);
+                for (i = 0; i < 4; i++) 
+                {
+                    mt_CheckEfx(mt_ChanTemp[i]);
+                }
             }
 
             mt_PatternPos += 16;
@@ -1028,29 +1023,31 @@ public class PT2Player
         }
         else
         {
-            mt_CheckEfx(mt_Chan1temp);
-            mt_CheckEfx(mt_Chan2temp);
-            mt_CheckEfx(mt_Chan3temp);
-            mt_CheckEfx(mt_Chan4temp);
-
+            for (i = 0; i < 4; i++) 
+            {
+                mt_CheckEfx(mt_ChanTemp[i]);
+            }
+            
             if (mt_PosJumpFlag) mt_NextPosition();
         }
     }
     
     public function mt_Init(mt_Data:ByteArray):void
     {
-        mt_Data.position = 0;
-        D = new ByteArray();
-        D.endian = Endian.LITTLE_ENDIAN;
-        D.writeBytes(mt_Data, 0, mt_Data.length); //clone it for less headaches
-        mt_Data.position = 0;
-        
         var sampleStarts:uint;      //*uint8_t
         var pattNum:int;
         var i:uint;
         var p:uint;                 //*uint16_t
         var j:uint;
         var lastPeriod:uint;
+        
+        //it be faster an shiet
+        D = new Vector.<uint>(mt_Data.length);
+        for (i = 0; i < mt_Data.length ; i++) 
+        {
+            D[i] = mt_Data[i];
+        }
+        
 
         pattNum = 0;
         for (i = 0; i < 128; ++i)
@@ -1181,8 +1178,7 @@ public class PT2Player
 
             if (v.TRIGGER && v.DAT != C.NULL)
             {
-                j = 0;
-                for (; j < numSamples; ++j)
+                for (j = 0; j < numSamples; ++j)
                 {
                     var kuk:int = D[v.DAT + v.POS];
                     kuk = kuk >= 128 ? kuk - 256 : kuk;
@@ -1225,22 +1221,6 @@ public class PT2Player
                             v.POS -= v.LEN;
                             v.LEN  = v.REPLEN;
                         }
-                    }
-                }
-
-                if ((j < numSamples) && !v.TRIGGER && (bSmp.samplesLeft || bVol.samplesLeft))
-                {
-                    for (; j < numSamples; ++j)
-                    {
-                        tempSample = bSmp.lastValue;
-                        tempVolume = bVol.lastValue;
-
-                        if (bSmp.samplesLeft) tempSample += bSmp.blepRun();
-                        if (bVol.samplesLeft) tempVolume += bVol.blepRun();
-
-                        tempSample    *= tempVolume;
-                        masterBuffer[j*2+0] += (tempSample * v.PANL);
-                        masterBuffer[j*2+1] += (tempSample * v.PANR);
                     }
                 }
             }
