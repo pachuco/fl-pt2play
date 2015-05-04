@@ -167,7 +167,7 @@ public class PT2Player
         for (i = 0; i < 4; i++) 
         {
             mt_ChanTemp[i] = new PT_CHN();
-            mt_ChanTemp[i].n_index = 0;
+            mt_ChanTemp[i].n_index = i;
             AUD[i] = new PA_CHN();
             blep[i] = new Blep();
             blepVol[i] = new Blep();
