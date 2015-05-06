@@ -1,42 +1,22 @@
 /*
-** PT2PLAY v1.0 - 4th of April 2015
-** ================================
+** PT2PLAY v1.0 - 6th of May 2015 - http://16-bits.org
+** ===================================================
 **
-** C port of ProTracker 2.3A's replayer, by 8bitbubsy (Olav Sorensen)
+** C port of ProTracker 2.3A's replayer, by 8bitbubsy (Olav Sørensen)
 ** using the original asm source codes by Crayon (Peter Hanning) and ZAP (Lars Hamre)
 **
+** The only differences is that InvertLoop (EFx) and NoteDelay (EDx) are handled like
+** the tracker replayer, since they have bugs in the replayer version bundled with the
+** PT source codes.
+**
 ** Even the mixer is written to do looping the way Paula (Amiga DSP) does.
-** Probably the most accurate PT MOD replayer ever written.
-**
-** The only difference is that InvertLoop (EFx) is handled like the tracker replayer,
-** not the standalone replayer (where it's different).
-**
 ** The BLEP (band-limited step) and high-pass filter routines were coded by aciddose/adejr.
 **
 ** pt2play must not be confused with ptplay by Ronald Hof, Timm S. Mueller and Per Johansson.
 ** I guess I was a bit unlucky with my replayer naming scheme, sorry!
 **
 ** This is by no means a piece of beautiful code, nor is it meant to be...
-** It's just an accurate ProTracker 2 replayer port for people to enjoy.
-**
-**
-** You need to link winmm.lib for this to compile (-lwinmm)
-**
-** User functions:
-**
-** #include <stdint.h>
-**
-** enum
-** {
-**     CIA_TEMPO_MODE    = 0,
-**     VBLANK_TEMPO_MODE = 1
-** };
-**
-** int8_t pt2play_Init(uint32_t outputFreq);
-** void pt2play_Close(void);
-** void pt2play_PauseSong(int8_t pause);
-** void pt2play_PlaySong(uint8_t *moduleData, int8_t tempoMode);
-** void pt2play_SetStereoSep(uint8_t percentage);
+** It's just an accurate ProTracker 2.3A replayer port for people to enjoy.
 */
 
 package pt2play 
@@ -764,7 +744,7 @@ public class PT2Player
         }
         else
         {
-            ch.n_length = 0;
+            ch.n_length = 1; // this must NOT be set to 0! 1 is the correct value.
         }
     }
 
@@ -1272,6 +1252,7 @@ public class PT2Player
 
     public function pt2play_SetStereoSep(percentage:uint):void
     {
+        if (percentage > 100) percentage = 100;
         mt_genPans(percentage);
     }
     

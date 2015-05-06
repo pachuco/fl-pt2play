@@ -1,5 +1,5 @@
 /*
-** PT2PLAY v1.0 - 2nd of May 2015 - http://16-bits.org
+** PT2PLAY v1.0 - 6th of May 2015 - http://16-bits.org
 ** ===================================================
 **
 ** C port of ProTracker 2.3A's replayer, by 8bitbubsy (Olav Sørensen)
@@ -845,7 +845,7 @@ static void mt_SampleOffset(PT_CHN *ch)
     }
     else
     {
-        ch->n_length = 0;
+        ch->n_length = 1; // this must NOT be set to 0! 1 is the correct value.
     }
 }
 
@@ -1407,6 +1407,9 @@ void pt2play_PlaySong(uint8_t *moduleData, int8_t tempoMode)
 
 void pt2play_SetStereoSep(uint8_t percentage)
 {
+    if (percentage > 100)
+        percentage = 100;
+
     mt_genPans(percentage);
 }
 
