@@ -1,4 +1,4 @@
-package pt2play 
+package debug 
 {
 
 import flash.display.Sprite;

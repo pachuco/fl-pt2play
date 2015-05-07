@@ -28,7 +28,7 @@ import flash.media.SoundChannel;
 import flash.utils.ByteArray;
 import flash.utils.Endian;
 import pt2play.struct.*;
-import pt2play.T;
+import debug.T;
 
 public class PT2Player 
 {
@@ -155,6 +155,7 @@ public class PT2Player
         
         mt_TimerVal     = (f_outputFreq * 125) / 50;
         samplesPerFrame = mt_TimerVal / 125;
+        mt_genPans(C.INITIAL_STEREO_SEP_PERCENTAGE);
         
         audioOut = new Sound();
         audioOut.addEventListener(SampleDataEvent.SAMPLE_DATA, audioLoop);
@@ -1242,7 +1243,6 @@ public class PT2Player
     public function pt2play_PlaySong(moduleData:ByteArray, tempoMode:int):void
     {
         mt_Init(moduleData);
-        mt_genPans(C.INITIAL_STEREO_SEP_PERCENTAGE);
 
         
         

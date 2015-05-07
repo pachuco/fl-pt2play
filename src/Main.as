@@ -4,7 +4,7 @@ import flash.utils.ByteArray;
 import flash.display.Sprite;
 import flash.events.Event;
 import pt2play.PT2Player;
-import pt2play.T;
+import debug.T;
 import com.sociodox.theminer.*;
 
 /**
@@ -14,7 +14,7 @@ import com.sociodox.theminer.*;
 public class Main extends Sprite 
 {
     
-    [Embed(source="mus/t/EDx_03.mod", mimeType="application/octet-stream")]
+    [Embed(source="mus/BrianTheLion01.mod", mimeType="application/octet-stream")]
     private var Song:Class;
     private var player:PT2Player;
     
