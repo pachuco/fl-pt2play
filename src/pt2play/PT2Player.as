@@ -1,13 +1,12 @@
 /*
-** PT2PLAY v1.0 - 6th of May 2015 - http://16-bits.org
+** PT2PLAY v1.0 - 7th of May 2015 - http://16-bits.org
 ** ===================================================
 **
 ** C port of ProTracker 2.3A's replayer, by 8bitbubsy (Olav Sørensen)
 ** using the original asm source codes by Crayon (Peter Hanning) and ZAP (Lars Hamre)
 **
-** The only differences is that InvertLoop (EFx) and NoteDelay (EDx) are handled like
-** the tracker replayer, since they have bugs in the replayer version bundled with the
-** PT source codes.
+** The only differences is that InvertLoop (EFx) is handled like the tracker replayer,
+** since it sounds different in the replayer version bundled with the PT source codes.
 **
 ** Even the mixer is written to do looping the way Paula (Amiga DSP) does.
 ** The BLEP (band-limited step) and high-pass filter routines were coded by aciddose/adejr.
@@ -17,6 +16,7 @@
 **
 ** This is by no means a piece of beautiful code, nor is it meant to be...
 ** It's just an accurate ProTracker 2.3A replayer port for people to enjoy.
+**
 */
 
 package pt2play 
@@ -1135,6 +1135,8 @@ public class PT2Player
     
     private function mixSampleBlock(streamOut:ByteArray, numSamples:uint):void
     {
+        var NULL:uint = C.NULL;
+        
         var i:uint;
         var sndOut:ByteArray;
         var j:uint;
@@ -1157,13 +1159,19 @@ public class PT2Player
             bSmp = blep[i];
             bVol = blepVol[i];
 
-            if (v.TRIGGER && v.DAT != C.NULL)
+            if (v.TRIGGER && v.DAT != NULL)
             {
                 for (j = 0; j < numSamples; ++j)
                 {
-                    var kuk:int = D[v.DAT + v.POS];
-                    kuk = kuk >= 128 ? kuk - 256 : kuk;
-                    tempSample = kuk * (1.0 / 128.0);
+                    if (v.DAT == NULL)
+                    {
+                    tempSample = 0.0
+                    }else
+                    {
+                        var kuk:int = D[v.DAT + v.POS];
+                        kuk = kuk >= 128 ? kuk - 256 : kuk;
+                        tempSample = kuk * (1.0 / 128.0);
+                    }
                     tempVolume = v.VOL;
 
                     if (tempSample != bSmp.lastValue)

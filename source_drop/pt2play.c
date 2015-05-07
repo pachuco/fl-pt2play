@@ -1,13 +1,12 @@
 /*
-** PT2PLAY v1.0 - 6th of May 2015 - http://16-bits.org
+** PT2PLAY v1.0 - 7th of May 2015 - http://16-bits.org
 ** ===================================================
 **
 ** C port of ProTracker 2.3A's replayer, by 8bitbubsy (Olav Sørensen)
 ** using the original asm source codes by Crayon (Peter Hanning) and ZAP (Lars Hamre)
 **
-** The only differences is that InvertLoop (EFx) and NoteDelay (EDx) are handled like
-** the tracker replayer, since they have bugs in the replayer version bundled with the
-** PT source codes.
+** The only differences is that InvertLoop (EFx) is handled like the tracker replayer,
+** since it sounds different in the replayer version bundled with the PT source codes.
 **
 ** Even the mixer is written to do looping the way Paula (Amiga DSP) does.
 ** The BLEP (band-limited step) and high-pass filter routines were coded by aciddose/adejr.
@@ -57,7 +56,7 @@
 #endif
 
 #define SOUND_BUFFERS 7
-#define INITIAL_STEREO_SEP_PERCENTAGE 25 /* stereo separation in percent */
+#define INITIAL_STEREO_SEP_PERCENTAGE 20 /* stereo separation in percent */
 
 
 /* BLEP CONSTANTS */
@@ -1259,7 +1258,7 @@ static void mixSampleBlock(int16_t *streamOut, uint32_t numSamples)
         {
             for (j = 0; j < numSamples; ++j)
             {
-                tempSample = (float)(v->DAT[v->POS]) * (1.0f / 128.0f);
+                tempSample = (v->DAT == NULL) ? 0.0f : ((float)(v->DAT[v->POS]) * (1.0f / 128.0f));
                 tempVolume = v->VOL;
 
                 if (tempSample != bSmp->lastValue)
