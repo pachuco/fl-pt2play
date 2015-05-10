@@ -115,14 +115,13 @@ public class PT2Player
         return arr[off + 1] + (arr[off] << 8);
     }
     [inline] static private function w_u16le(arr:Vector.<uint>, off:uint, x:uint):void {
-        x &= 0xFFFF;
-        arr[off + 0] = x;
-        arr[off + 1] = x >> 8;
+        arr[off + 0] = x & 0xFF;
+        arr[off + 1] = (x >> 8) & 0xFF;
     }
     [inline] static private function w_u16be(arr:Vector.<uint>, off:uint, x:uint):void {
         x &= 0xFFFF;
-        arr[off + 0] = x >> 8;
-        arr[off + 1] = x;
+        arr[off + 0] = (x >> 8) & 0xFF;
+        arr[off + 1] = x & 0xFF;
     }
     [inline] static private function sign8(b:int):int {
         if(b >= 128) b -= 256
@@ -1015,10 +1014,10 @@ public class PT2Player
     
     public function mt_Init(mt_Data:ByteArray):void
     {
-        var sampleStarts:uint;      //*uint8_t
+        var sampleStarts:uint;                  //*uint8_t
         var pattNum:int;
         var i:uint;
-        var p:uint;                 //*uint16_t
+        var p:uint, p0:uint, p2:uint, p3:uint;  //*uint16_t
         var j:uint;
         var lastPeriod:uint;
         
@@ -1042,33 +1041,41 @@ public class PT2Player
         {
             mt_SampleStarts[i] = sampleStarts;
             p = 42 + (30 * i);//uint16_t *
+            p0 = r_u16be(D, p + 0);
+            p2 = r_u16be(D, p + 4);
+            p3 = r_u16be(D, p + 6);
+            
             
             // loop point sanity checking
-            if ((r_u16be(D, p+4) + r_u16be(D, p+6)) > r_u16be(D, p+0))
+            if ((p2 + p3) > p0)
             {
-                if (((r_u16be(D, p+4) / 2) + r_u16be(D, p+6)) <= r_u16be(D, p+0))
+                if (((p2 / 2) + p3) <= p0)
                 {
                     // fix for poorly converted STK->PT modules
-                    w_u16be(D, p+4, r_u16be(D, p+4) / 2);
+                    p2 /= 2;
                 }
                 else
                 {
                     // loop points are still illegal, deactivate loop
-                    w_u16be(D, p+4, 0);
-                    w_u16be(D, p+6, 1);
+                    p2 = 0;
+                    p3 = 1;
                 }
             }
             
-            if (r_u16be(D, p + 6) <= 1)
+            if (p3 <= 1)
             {
-                w_u16be(D, p + 6, 1); // Fix illegal loop repeats (f.ex. from FT2 .MODs)
+                p3 = 1; // Fix illegal loop repeats (f.ex. from FT2 .MODs)
 
                 // If no loop, zero first two samples of data to prevent "beep"
                 D[sampleStarts + 0] = 0;
                 D[sampleStarts + 1] = 0;
             }
             
-            sampleStarts += r_u16be(D, p + 0) << 1;
+            w_u16be(D, p + 0, p0);
+            w_u16be(D, p + 4, p2);
+            w_u16be(D, p + 6, p3);
+            
+            sampleStarts += p0 << 1;
         }
 
         /*
@@ -1133,7 +1140,7 @@ public class PT2Player
         AUD[2].PANR = sinApx(p);
     }
     
-    private function mixSampleBlock(streamOut:ByteArray, numSamples:uint):void
+    private function mixSampleBlock_BLEP(streamOut:ByteArray, numSamples:uint):void
     {
         var NULL:uint = C.NULL;
         
@@ -1277,7 +1284,7 @@ public class PT2Player
             samplesTodo = (sampleBlock < samplesLeft) ? sampleBlock : samplesLeft;
             if (samplesTodo > 0)
             {
-                mixSampleBlock(event.data, samplesTodo);
+                mixSampleBlock_BLEP(event.data, samplesTodo);
                 
                 sampleBlock   -= samplesTodo;
                 samplesLeft   -= samplesTodo;
