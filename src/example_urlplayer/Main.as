@@ -18,9 +18,9 @@ package example_urlplayer
         
         private var ef:ErrorField;
         
-        private var songurl:String;
-        private var stereo:uint;
-        private var vblank:uint;
+        private var p_song:String;
+        private var p_stereo:uint;
+        private var p_vblank:uint;
         
         public function Main():void 
         {
@@ -35,21 +35,21 @@ package example_urlplayer
             ef = new ErrorField(this, 20, 40, 750, 0x000000);
             try {
                 qs = new QueryString("");
-                songurl = qs.parameters.songurl as String;
-                stereo = qs.parameters.stereo == null ? 50 : uint(qs.parameters.stereo);
-                vblank = qs.parameters.vblank == null ? 0 : uint(qs.parameters.vblank);
+                p_song = qs.parameters.song as String;
+                p_stereo = qs.parameters.stereo == null ? 50 : uint(qs.parameters.stereo);
+                p_vblank = qs.parameters.vblank == null ? 0 : uint(qs.parameters.vblank);
                 
-                if (songurl == null || songurl == "") {
+                if (p_song == null || p_song == "") {
                     ef.appendError("Usage example:");
-                    ef.appendError(SWFName(this) + "?songurl=corruption.mod&stereo=100&vblank=1");
-                    ef.appendError("songurl -- filename of song on the server");
+                    ef.appendError(SWFName(this) + "?song=corruption.mod&stereo=100&vblank=1");
+                    ef.appendError("song -- filename of song on the server");
                     ef.appendError("stereo -- separation in percent, 0 - 100");
                     ef.appendError("vblank -- breaks tunes, 0 - 1");
                     return;
                 }
                 replayer = new PT2Player();
-                loadSongFromURL(songurl);
-                ef.appendError("songurl: " + songurl);
+                loadSongFromURL(p_song);
+                ef.appendError("songurl: " + p_song);
             }catch (e:Error) {
                 ef.appendError(e.message);
             }
@@ -67,8 +67,8 @@ package example_urlplayer
             
             var evtSongLoadSuccess:Function = function(evt:Event):void
             {
-                replayer.pt2play_SetStereoSep(stereo);
-                replayer.pt2play_PlaySong(loader.data, vblank);
+                replayer.pt2play_SetStereoSep(p_stereo);
+                replayer.pt2play_PlaySong(loader.data, p_vblank);
                 loader = null;
             }
             
