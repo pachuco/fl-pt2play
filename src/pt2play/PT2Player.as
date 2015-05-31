@@ -32,6 +32,7 @@ import debug.T;
 
 public class PT2Player 
 {
+    public var amigaFilter:Boolean = false;
     
     private var D:Vector.<uint>;
     private var audioOut:Sound;
@@ -138,10 +139,8 @@ public class PT2Player
         blep = new Vector.<Blep>(4, true);
         blepVol = new Vector.<Blep>(4, true);
         masterBuffer = new Vector.<Number>;
-        filterHi = new lossyIntegrator_t();
-        filterLo = new lossyIntegrator_t();
-        calcCoeffLossyIntegrator(f_outputFreq, 5.2, filterHi);
-        calcCoeffLossyIntegrator(f_outputFreq, 5000, filterLo);
+        filterHi = new lossyIntegrator_t(f_outputFreq, 5.2);
+        filterLo = new lossyIntegrator_t(f_outputFreq, 5000);
         
         for (i = 0; i < 4; i++) 
         {
@@ -162,64 +161,6 @@ public class PT2Player
     }
     
     /* CODE START */
-    private function calcCoeffLossyIntegrator(sr:Number, hz:Number, filter:lossyIntegrator_t):void
-    {
-        filter.coefficient[0] = Math.tan(Math.PI * hz / sr);
-        filter.coefficient[1] = 1.0 / (1.0 + filter.coefficient[0]);
-    }
-
-    private function clearLossyIntegrator(filter:lossyIntegrator_t):void
-    {
-        filter.buffer[0] = 0.0;
-        filter.buffer[1] = 0.0;
-    }
-
-    [inline] final private function lossyIntegrator(filter:lossyIntegrator_t, vin:Vector.<Number>, vout:Vector.<Number>):void
-    {
-        var output:Number;
-        var len:uint = vin.length / 2;
-        for (var i:int = 0; i < len; i++) 
-        {
-            // left channel
-            output            = (filter.coefficient[0] * vin[i*2+0] + filter.buffer[0]) * filter.coefficient[1];
-            filter.buffer[0] = filter.coefficient[0] * (vin[i*2+0] - output) + output + 1e-10;
-            vout[i*2+0]           = output;
-
-            // right channel
-            output            = (filter.coefficient[0] * vin[i*2+1] + filter.buffer[1]) * filter.coefficient[1];
-            filter.buffer[1] = filter.coefficient[0] * (vin[i*2+1] - output) + output + 1e-10;
-            vout[i*2+1]           = output; 
-        }
-    }
-
-    [inline] final private function lossyIntegratorHighPass(filter:lossyIntegrator_t, vin:Vector.<Number>, vout:Vector.<Number>):void
-    {
-        var output:Number;
-        var len:uint = vin.length / 2;
-        for (var i:int = 0; i < len; i++) 
-        {
-            // left channel
-            output            = (filter.coefficient[0] * vin[i*2+0] + filter.buffer[0]) * filter.coefficient[1];
-            filter.buffer[0] = filter.coefficient[0] * (vin[i*2+0] - output) + output + 1e-10;
-            vout[i*2+0]           = vin[i*2+0] - output;
-
-            // right channel
-            output            = (filter.coefficient[0] * vin[i*2+1] + filter.buffer[1]) * filter.coefficient[1];
-            filter.buffer[1] = filter.coefficient[0] * (vin[i*2+1] - output) + output + 1e-10;
-            vout[i*2+1]           = vin[i*2+1] - output; 
-        }
-    }
-/*
-[inline] final private function lossyIntegratorHighPass(filter:lossyIntegrator_t, vin:Vector.<Number>, vout:Vector.<Number>):void
-{
-    var low:Vector.<Number>; //float[2]
-
-    lossyIntegrator(filter, vin, low);
-
-    vout[0] = vin[0] - low[0];
-    vout[1] = vin[1] - low[1];
-}
-*/
     
     private function mt_UpdateFunk(ch:PT_CHN):void
     {
@@ -1222,8 +1163,11 @@ public class PT2Player
             }
         }
 
-        //lossyIntegratorHighPass(filterHi, masterBuffer, masterBuffer);
-        //lossyIntegrator(filterLo, masterBuffer, masterBuffer);
+        if (amigaFilter)
+        {
+            filterHi.lossyIntegratorHighPass(masterBuffer, masterBuffer);
+            filterLo.lossyIntegrator(masterBuffer, masterBuffer);
+        }
         
         sndOut = streamOut;
         for (j = 0; j < numSamples; ++j)

@@ -21,6 +21,7 @@ package example_urlplayer
         private var p_song:String;
         private var p_stereo:uint;
         private var p_vblank:uint;
+        private var p_filter:uint;
         
         public function Main():void 
         {
@@ -38,13 +39,15 @@ package example_urlplayer
                 p_song = qs.parameters.song as String;
                 p_stereo = qs.parameters.stereo == null ? 50 : uint(qs.parameters.stereo);
                 p_vblank = qs.parameters.vblank == null ? 0 : uint(qs.parameters.vblank);
+                p_filter = qs.parameters.filter == null ? 0 : uint(qs.parameters.filter);
                 
                 if (p_song == null || p_song == "") {
                     ef.appendError("Usage example:");
-                    ef.appendError(SWFName(this) + "?song=corruption.mod&stereo=100&vblank=1");
+                    ef.appendError(SWFName(this) + "?song=corruption.mod&stereo=100&vblank=1&filter=0");
                     ef.appendError("song -- filename of song on the server");
                     ef.appendError("stereo -- separation in percent, 0 - 100");
                     ef.appendError("vblank -- breaks tunes, 0 - 1");
+                    ef.appendError("filter -- enables A500 filter, 0 - 1");
                     return;
                 }
                 replayer = new PT2Player();
@@ -69,6 +72,7 @@ package example_urlplayer
             {
                 replayer.pt2play_SetStereoSep(p_stereo);
                 replayer.pt2play_PlaySong(loader.data, p_vblank);
+                replayer.amigaFilter = Boolean(p_filter);
                 loader = null;
             }
             
